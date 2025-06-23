@@ -2,26 +2,37 @@
 
 import { ContentSearchResponse, ContentItem } from './types';
 
-// Use Railway's environment variable or fallback to localhost
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost';  
+// Use environment variable for API URL - no hardcoded fallback
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-const API_PORT = process.env.NEXT_PUBLIC_API_PORT || '8000';
-const API_URL = `${API_BASE_URL}:${API_PORT}`;
-console.log('🔗 API Base URL:', API_URL);
+if (!API_BASE_URL) {
+  console.error('❌ NEXT_PUBLIC_API_URL environment variable is not set!');
+  console.error('Please set NEXT_PUBLIC_API_URL in your Railway environment variables.');
+}
+
+console.log('🔗 API Base URL:', API_BASE_URL);
 console.log('🌍 Environment:', process.env.NODE_ENV);
 
 export class ContentApiService {
     private baseUrl: string;
 
-    constructor(baseUrl: string = API_URL) {
-        this.baseUrl = baseUrl;
+    constructor(baseUrl?: string) {
+        this.baseUrl = baseUrl || API_BASE_URL || '';
         console.log('🚀 ContentApiService initialized with URL:', this.baseUrl);
+        
+        if (!this.baseUrl) {
+            console.error('❌ No API URL provided! Please set NEXT_PUBLIC_API_URL environment variable.');
+        }
     }
 
     /**
      * Get all public content summary
      */
     async getPublicSummary(): Promise<ContentSearchResponse> {
+        if (!this.baseUrl) {
+            throw new Error('API URL not configured. Please set NEXT_PUBLIC_API_URL environment variable.');
+        }
+
         const url = `${this.baseUrl}/contents/`;
         console.log('📡 Making request to:', url);
         
@@ -52,10 +63,14 @@ export class ContentApiService {
         }
     }
 
-    /**     
+    /**
      * Get content by ID
      */
     async getContentById(contentId: string): Promise<ContentItem> {
+        if (!this.baseUrl) {
+            throw new Error('API URL not configured. Please set NEXT_PUBLIC_API_URL environment variable.');
+        }
+
         const url = `${this.baseUrl}/contents/${contentId}`;
         console.log('📡 Making request to:', url);
         
@@ -88,6 +103,10 @@ export class ContentApiService {
      * Search content with filters
      */
     async searchContent(searchQuery: any): Promise<ContentSearchResponse> {
+        if (!this.baseUrl) {
+            throw new Error('API URL not configured. Please set NEXT_PUBLIC_API_URL environment variable.');
+        }
+
         try {
             const queryParams = new URLSearchParams();
             
