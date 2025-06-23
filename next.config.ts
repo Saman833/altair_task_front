@@ -5,7 +5,9 @@ const nextConfig: NextConfig = {
   env: {
     PORT: process.env.PORT || '3000',
   },
-  // Ensure Next.js works with Railway's domain
+  // Ensure proper routing
+  trailingSlash: false,
+  // Handle Railway's domain properly
   async headers() {
     return [
       {
