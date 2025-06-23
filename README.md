@@ -1,22 +1,11 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# sources information : 
 
-## Getting Started
+- **Email to send messages:**  
+  [saman.interview.task@gmail.com](mailto:saman.interview.task@gmail.com)
 
-First, run the development server:
+- **Telegram Bot ID:**  
+  [@AltaIR_task_bot](https://t.me/AltaIR_task_bot)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
- 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Thank you for the opportunity 🙂
