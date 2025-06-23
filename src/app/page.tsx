@@ -18,6 +18,7 @@ export default function Home() {
     console.log('🚀 Home page loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('🌍 Environment:', process.env.NODE_ENV);
+    console.log('🔗 NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
     
     // Test API connection
     testApiConnection();
@@ -126,6 +127,7 @@ export default function Home() {
       <div className="fixed top-0 right-0 bg-black text-white p-2 text-xs z-50">
         <div>Debug: {process.env.NODE_ENV} | {new Date().toLocaleTimeString()}</div>
         <div>API: {apiStatus}</div>
+        <div>ENV: {process.env.NEXT_PUBLIC_API_URL ? 'Set' : 'Not Set'}</div>
       </div>
 
       <CollapsibleSearchBar 
