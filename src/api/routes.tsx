@@ -2,6 +2,7 @@
 
 import { ContentSearchResponse, ContentItem } from './types';
 
+// Use Railway's environment variable or fallback to localhost
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export class ContentApiService {
@@ -21,6 +22,8 @@ export class ContentApiService {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                // Add timeout for Railway
+                signal: AbortSignal.timeout(10000), // 10 second timeout
             });
 
             if (!response.ok) {
@@ -45,6 +48,7 @@ export class ContentApiService {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                signal: AbortSignal.timeout(10000),
             });
 
             if (!response.ok) {
@@ -90,6 +94,7 @@ export class ContentApiService {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                signal: AbortSignal.timeout(10000),
             });
 
             if (!response.ok) {
