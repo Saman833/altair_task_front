@@ -1,57 +1,72 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  // For server-side API routes, use regular environment variables (not NEXT_PUBLIC_)
-  const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+  
+  console.log('🔍 Test Backend - Environment Variables:');
+  console.log('NEXT_PUBLIC_API_URL:', backendUrl);
+  console.log('NODE_ENV:', process.env.NODE_ENV);
   
   if (!backendUrl) {
     return NextResponse.json({
-      status: 'error',
-      error: 'API_URL or NEXT_PUBLIC_API_URL environment variable is not set',
-      message: 'Please set API_URL in your Railway environment variables.',
-      timestamp: new Date().toISOString(),
+      error: 'NEXT_PUBLIC_API_URL not set',
+      message: 'Please set NEXT_PUBLIC_API_URL in Railway environment variables',
       availableEnvVars: Object.keys(process.env).filter(key => key.includes('API') || key.includes('URL'))
     }, { status: 500 });
   }
 
-  const fullUrl = `${backendUrl}/contents/`;
-  
   try {
-    console.log('🧪 Testing backend connection to:', fullUrl);
+    // Test the backend URL
+    const testUrl = backendUrl.endsWith('/contents/') 
+      ? backendUrl 
+      : `${backendUrl}/contents/`;
     
-    const response = await fetch(fullUrl, {
+    console.log('🧪 Testing backend URL:', testUrl);
+    
+    const response = await fetch(testUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(10000),
     });
 
     console.log('📥 Backend response status:', response.status);
-
+    
     if (!response.ok) {
-      throw new Error(`Backend responded with status: ${response.status}`);
+      const errorText = await response.text();
+      return NextResponse.json({
+        error: 'Backend request failed',
+        status: response.status,
+        statusText: response.statusText,
+        url: testUrl,
+        errorText: errorText,
+        headers: Object.fromEntries(response.headers.entries())
+      }, { status: 500 });
     }
 
     const data = await response.json();
     
     return NextResponse.json({
-      status: 'success',
-      backendUrl: fullUrl,
+      success: true,
+      backendUrl: backendUrl,
+      testUrl: testUrl,
       responseStatus: response.status,
       dataLength: Array.isArray(data) ? data.length : 'Not an array',
-      timestamp: new Date().toISOString(),
-      message: 'Backend connection successful!'
+      sampleData: Array.isArray(data) && data.length > 0 ? data[0] : null
     });
+
   } catch (error) {
     console.error('❌ Backend test failed:', error);
     
     return NextResponse.json({
-      status: 'error',
-      backendUrl: fullUrl,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString(),
-      message: 'Backend connection failed!'
+      error: 'Backend connection failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      backendUrl: backendUrl,
+      testUrl: backendUrl.endsWith('/contents/') 
+        ? backendUrl 
+        : `${backendUrl}/contents/`
     }, { status: 500 });
   }
 } 

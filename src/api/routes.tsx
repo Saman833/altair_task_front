@@ -5,9 +5,17 @@ import { ContentSearchResponse, ContentItem } from './types';
 // Use environment variable for API URL - no hardcoded fallback
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
+// Debug all environment variables that might be relevant
+console.log('🔍 Environment Variables Debug:');
+console.log('NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
+console.log('API_URL:', process.env.API_URL);
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('All env vars with API:', Object.keys(process.env).filter(key => key.includes('API')));
+
 if (!API_BASE_URL) {
   console.error('❌ NEXT_PUBLIC_API_URL environment variable is not set!');
   console.error('Please set NEXT_PUBLIC_API_URL in your Railway environment variables.');
+  console.error('Current environment variables:', Object.keys(process.env));
 }
 
 console.log('🔗 API Base URL:', API_BASE_URL);
@@ -22,6 +30,7 @@ export class ContentApiService {
         
         if (!this.baseUrl) {
             console.error('❌ No API URL provided! Please set NEXT_PUBLIC_API_URL environment variable.');
+            console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('API') || key.includes('URL')));
         }
     }
 
@@ -33,7 +42,14 @@ export class ContentApiService {
             throw new Error('API URL not configured. Please set NEXT_PUBLIC_API_URL environment variable.');
         }
 
-        const url = `${this.baseUrl}/contents/`;
+        // Ensure the URL ends with the correct path and includes port 8000 if needed
+        let url = this.baseUrl;
+        
+        // If the URL doesn't end with /contents/, add it
+        if (!url.endsWith('/contents/')) {
+            url = url.endsWith('/') ? `${url}contents/` : `${url}/contents/`;
+        }
+            
         console.log('📡 Making request to:', url);
         
         try {
@@ -41,16 +57,19 @@ export class ContentApiService {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                 },
                 // Add timeout for Railway
-                signal: AbortSignal.timeout(10000), // 10 second timeout
+                signal: AbortSignal.timeout(15000), // 15 second timeout
             });
 
             console.log('📥 Response status:', response.status);
             console.log('📥 Response headers:', Object.fromEntries(response.headers.entries()));
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                console.error('❌ Response error text:', errorText);
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
             const data: ContentSearchResponse = await response.json();
@@ -59,6 +78,7 @@ export class ContentApiService {
         } catch (error) {
             console.error('❌ Error fetching public summary:', error);
             console.error('❌ Request URL was:', url);
+            console.error('❌ Base URL was:', this.baseUrl);
             throw error;
         }
     }
@@ -79,14 +99,17 @@ export class ContentApiService {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                 },
-                signal: AbortSignal.timeout(10000),
+                signal: AbortSignal.timeout(15000),
             });
 
             console.log('📥 Response status:', response.status);
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                console.error('❌ Response error text:', errorText);
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
             const data: ContentItem = await response.json();
@@ -134,14 +157,17 @@ export class ContentApiService {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                 },
-                signal: AbortSignal.timeout(10000),
+                signal: AbortSignal.timeout(15000),
             });
 
             console.log('📥 Search response status:', response.status);
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                console.error('❌ Response error text:', errorText);
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
             const data: ContentSearchResponse = await response.json();
