@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import CollapsibleSearchBar from '../components/CollapsibleSearchBar';
 import Dashboard from '../components/Dashboard';
 import { ContentSearchResponse, ContentItem } from '../api/types';
@@ -9,17 +9,28 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<ContentSearchResponse>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Add debugging logs
+  useEffect(() => {
+    console.log('🚀 Home page loaded');
+    console.log('📍 Current URL:', window.location.href);
+    console.log('🌍 Environment:', process.env.NODE_ENV);
+  }, []);
 
   const handleSearchResults = (results: ContentSearchResponse) => {
+    console.log('🔍 Search results received:', results.length, 'items');
     setSearchResults(results);
     setShowSearchResults(true);
   };
 
   const handleLoading = (loading: boolean) => {
+    console.log('⏳ Loading state:', loading);
     setIsLoading(loading);
   };
 
   const handleBackToDashboard = () => {
+    console.log('⬅️ Going back to dashboard');
     setShowSearchResults(false);
     setSearchResults([]);
   };
@@ -71,8 +82,31 @@ export default function Home() {
     return colors[entityType as keyof typeof colors] || 'bg-gray-50 text-gray-700 border-gray-200';
   };
 
+  // Show error if there's one
+  if (error) {
+    return (
+      <div className="min-h-screen bg-red-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg shadow-lg text-center">
+          <h1 className="text-2xl font-bold text-red-800 mb-4">Error</h1>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button 
+            onClick={() => setError(null)}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Debug info - remove in production */}
+      <div className="fixed top-0 right-0 bg-black text-white p-2 text-xs z-50">
+        Debug: {process.env.NODE_ENV} | {new Date().toLocaleTimeString()}
+      </div>
+
       <CollapsibleSearchBar 
         onSearchResults={handleSearchResults}
         onLoading={handleLoading}
