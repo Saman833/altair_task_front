@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+  // For server-side API routes, use regular environment variables (not NEXT_PUBLIC_)
+  const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
   
   if (!backendUrl) {
     return NextResponse.json({
       status: 'error',
-      error: 'NEXT_PUBLIC_API_URL environment variable is not set',
-      message: 'Please set NEXT_PUBLIC_API_URL in your Railway environment variables.',
-      timestamp: new Date().toISOString()
+      error: 'API_URL or NEXT_PUBLIC_API_URL environment variable is not set',
+      message: 'Please set API_URL in your Railway environment variables.',
+      timestamp: new Date().toISOString(),
+      availableEnvVars: Object.keys(process.env).filter(key => key.includes('API') || key.includes('URL'))
     }, { status: 500 });
   }
 
