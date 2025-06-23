@@ -4,19 +4,39 @@ import { useState, useEffect } from 'react';
 import CollapsibleSearchBar from '../components/CollapsibleSearchBar';
 import Dashboard from '../components/Dashboard';
 import { ContentSearchResponse, ContentItem } from '../api/types';
+import { contentApi } from '../api/routes';
 
 export default function Home() {
   const [searchResults, setSearchResults] = useState<ContentSearchResponse>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [apiStatus, setApiStatus] = useState<string>('Testing...');
 
-  // Add debugging logs
+  // Add debugging logs and API test
   useEffect(() => {
     console.log('🚀 Home page loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('🌍 Environment:', process.env.NODE_ENV);
+    
+    // Test API connection
+    testApiConnection();
   }, []);
+
+  const testApiConnection = async () => {
+    try {
+      console.log('🧪 Testing API connection...');
+      setApiStatus('Testing API...');
+      
+      const results = await contentApi.getPublicSummary();
+      console.log('✅ API test successful:', results.length, 'items received');
+      setApiStatus(`✅ API Connected (${results.length} items)`);
+    } catch (error) {
+      console.error('❌ API test failed:', error);
+      setApiStatus('❌ API Connection Failed');
+      setError(`API Connection Error: ${error}`);
+    }
+  };
 
   const handleSearchResults = (results: ContentSearchResponse) => {
     console.log('🔍 Search results received:', results.length, 'items');
@@ -104,7 +124,8 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Debug info - remove in production */}
       <div className="fixed top-0 right-0 bg-black text-white p-2 text-xs z-50">
-        Debug: {process.env.NODE_ENV} | {new Date().toLocaleTimeString()}
+        <div>Debug: {process.env.NODE_ENV} | {new Date().toLocaleTimeString()}</div>
+        <div>API: {apiStatus}</div>
       </div>
 
       <CollapsibleSearchBar 
