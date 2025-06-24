@@ -123,13 +123,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Debug info - remove in production */}
-      <div className="fixed top-0 right-0 bg-black text-white p-2 text-xs z-50">
-        <div>Debug: {process.env.NODE_ENV} | {new Date().toLocaleTimeString()}</div>
-        <div>API: {apiStatus}</div>
-        <div>ENV: {process.env.NEXT_PUBLIC_API_URL ? 'Set' : 'Not Set'}</div>
-      </div>
-
       {/* Main Layout with Sidebar */}
       <div className="flex h-screen">
         {/* Left Sidebar with Search */}
