@@ -7,12 +7,11 @@ import FilterDropdowns from './FilterDropdowns';
 
 export default function SearchBar() {
     const [searchQuery, setSearchQuery] = useState<SearchQuery>({
-        keywords: '',
-        startDate: '',
-        endDate: '',
-        Date_Mentiond: '',
-        category: undefined,
-        source: undefined
+        keywords: [],
+        start_date_duration: null,
+        end_date_duration: null,
+        category: null,
+        source: null
     });
 
     const handleSearch = (e: React.FormEvent) => {
@@ -21,10 +20,21 @@ export default function SearchBar() {
     };
 
     const handleInputChange = (field: keyof SearchQuery, value: string) => {
-        setSearchQuery(prev => ({
-            ...prev,
-            [field]: value
-        }));
+        setSearchQuery(prev => {
+            if (field === 'keywords') {
+                // Convert comma-separated string to array
+                const keywordsArray = value.split(',').map(k => k.trim()).filter(k => k.length > 0);
+                return {
+                    ...prev,
+                    keywords: keywordsArray.length > 0 ? keywordsArray : null
+                };
+            } else {
+                return {
+                    ...prev,
+                    [field]: value || null
+                };
+            }
+        });
     };
 
     return (
@@ -36,7 +46,7 @@ export default function SearchBar() {
                     <input
                         type="text"
                         placeholder="Enter search keywords..."
-                        value={searchQuery.keywords || ''}
+                        value={searchQuery.keywords ? searchQuery.keywords.join(', ') : ''}
                         onChange={(e) => handleInputChange('keywords', e.target.value)}
                         className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -44,16 +54,15 @@ export default function SearchBar() {
 
                 {/* Date Filters */}
                 <DateFilters
-                    startDate={searchQuery.startDate?.toString()}
-                    endDate={searchQuery.endDate?.toString()}
-                    dateMentioned={searchQuery.Date_Mentiond?.toString()}
+                    startDate={searchQuery.start_date_duration?.toString()}
+                    endDate={searchQuery.end_date_duration?.toString()}
                     onDateChange={handleInputChange}
                 />
 
                 {/* Filter Dropdowns */}
                 <FilterDropdowns
-                    category={searchQuery.category}
-                    source={searchQuery.source}
+                    category={searchQuery.category || undefined}
+                    source={searchQuery.source || undefined}
                     onFilterChange={handleInputChange}
                 />
 

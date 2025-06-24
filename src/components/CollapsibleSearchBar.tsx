@@ -12,12 +12,11 @@ interface CollapsibleSearchBarProps {
 export default function CollapsibleSearchBar({ onSearchResults, onLoading }: CollapsibleSearchBarProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [searchQuery, setSearchQuery] = useState<SearchQuery>({
-        keywords: '',
-        startDate: '',
-        endDate: '',
-        Date_Mentiond: '',
-        category: undefined,
-        source: undefined
+        keywords: [],
+        start_date_duration: null,
+        end_date_duration: null,
+        category: null,
+        source: null
     });
 
     const handleSearch = async (e: React.FormEvent) => {
@@ -25,15 +24,14 @@ export default function CollapsibleSearchBar({ onSearchResults, onLoading }: Col
         
         try {
             onLoading(true);
-            console.log('Search Query:', searchQuery);
+            console.log('🔍 Search Query:', searchQuery);
             
-            // For now, just get all public summary
-            // Later you can implement the search with filters
-            const results = await contentApi.getPublicSummary();
+            // Use the searchContent method with the actual search query
+            const results = await contentApi.searchContent(searchQuery);
             onSearchResults(results);
             
         } catch (error) {
-            console.error('Search failed:', error);
+            console.error('❌ Search failed:', error);
             // You might want to show an error message to the user
         } finally {
             onLoading(false);
@@ -41,10 +39,21 @@ export default function CollapsibleSearchBar({ onSearchResults, onLoading }: Col
     };
 
     const handleInputChange = (field: keyof SearchQuery, value: string) => {
-        setSearchQuery(prev => ({
-            ...prev,
-            [field]: value
-        }));
+        setSearchQuery(prev => {
+            if (field === 'keywords') {
+                // Convert comma-separated string to array
+                const keywordsArray = value.split(',').map(k => k.trim()).filter(k => k.length > 0);
+                return {
+                    ...prev,
+                    keywords: keywordsArray.length > 0 ? keywordsArray : null
+                };
+            } else {
+                return {
+                    ...prev,
+                    [field]: value || null
+                };
+            }
+        });
     };
 
     return (
@@ -85,7 +94,7 @@ export default function CollapsibleSearchBar({ onSearchResults, onLoading }: Col
                                 <input
                                     type="text"
                                     placeholder="Enter search keywords..."
-                                    value={searchQuery.keywords || ''}
+                                    value={searchQuery.keywords?.join(', ') || ''}
                                     onChange={(e) => handleInputChange('keywords', e.target.value)}
                                     className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white/80 backdrop-blur-sm"
                                 />
@@ -104,8 +113,8 @@ export default function CollapsibleSearchBar({ onSearchResults, onLoading }: Col
                                         <label className="block text-sm font-medium text-gray-600">Start Date</label>
                                         <input
                                             type="date"
-                                            value={searchQuery.startDate?.toString() || ''}
-                                            onChange={(e) => handleInputChange('startDate', e.target.value)}
+                                            value={searchQuery.start_date_duration?.toString() || ''}
+                                            onChange={(e) => handleInputChange('start_date_duration', e.target.value)}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/80"
                                         />
                                     </div>
@@ -113,17 +122,8 @@ export default function CollapsibleSearchBar({ onSearchResults, onLoading }: Col
                                         <label className="block text-sm font-medium text-gray-600">End Date</label>
                                         <input
                                             type="date"
-                                            value={searchQuery.endDate?.toString() || ''}
-                                            onChange={(e) => handleInputChange('endDate', e.target.value)}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/80"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-gray-600">Date Mentioned</label>
-                                        <input
-                                            type="date"
-                                            value={searchQuery.Date_Mentiond?.toString() || ''}
-                                            onChange={(e) => handleInputChange('Date_Mentiond', e.target.value)}
+                                            value={searchQuery.end_date_duration?.toString() || ''}
+                                            onChange={(e) => handleInputChange('end_date_duration', e.target.value)}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/80"
                                         />
                                     </div>

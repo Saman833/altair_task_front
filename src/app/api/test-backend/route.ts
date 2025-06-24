@@ -16,12 +16,12 @@ export async function GET() {
   }
 
   try {
-    // Test the backend URL
+    // Test the backend URL directly (server-side, no CORS issues)
     const testUrl = backendUrl.endsWith('/contents/') 
       ? backendUrl 
       : `${backendUrl}/contents/`;
     
-    console.log('🧪 Testing backend URL:', testUrl);
+    console.log('🧪 Testing backend URL directly:', testUrl);
     
     const response = await fetch(testUrl, {
       method: 'GET',
@@ -54,7 +54,8 @@ export async function GET() {
       testUrl: testUrl,
       responseStatus: response.status,
       dataLength: Array.isArray(data) ? data.length : 'Not an array',
-      sampleData: Array.isArray(data) && data.length > 0 ? data[0] : null
+      sampleData: Array.isArray(data) && data.length > 0 ? data[0] : null,
+      message: '✅ Backend is accessible from server-side (proxy will work)'
     });
 
   } catch (error) {
@@ -66,7 +67,8 @@ export async function GET() {
       backendUrl: backendUrl,
       testUrl: backendUrl.endsWith('/contents/') 
         ? backendUrl 
-        : `${backendUrl}/contents/`
+        : `${backendUrl}/contents/`,
+      note: 'If this fails, the proxy will also fail. Check your backend service.'
     }, { status: 500 });
   }
 } 
