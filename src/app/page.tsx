@@ -136,18 +136,18 @@ export default function Home() {
       />
       
       {/* Main content with top padding to account for fixed header */}
-      <main className="pt-16">
+      <main className="pt-8">
         {showSearchResults ? (
           // Search Results View
-          <div className="p-8">
+          <div className="p-4">
             <div className="container mx-auto">
               {/* Back to Dashboard Button */}
-              <div className="mb-6">
+              <div className="mb-4">
                 <button
                   onClick={handleBackToDashboard}
                   className="flex items-center space-x-2 text-purple-600 hover:text-purple-700 transition-colors"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                   </svg>
                   <span>Back to Dashboard</span>
@@ -156,8 +156,8 @@ export default function Home() {
 
               {/* Loading State */}
               {isLoading && (
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                <div className="flex justify-center items-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
                   <span className="ml-3 text-gray-600">Loading results...</span>
                 </div>
               )}
@@ -165,7 +165,7 @@ export default function Home() {
               {/* Search Results */}
               {!isLoading && searchResults.length > 0 && (
                 <div className="space-y-4">
-                  <h2 className="text-2xl font-semibold text-gray-800 mb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
                     Search Results ({searchResults.length} items)
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
