@@ -6,12 +6,15 @@ export default function TestPage() {
   const [testResult, setTestResult] = useState<any>(null);
   const [proxyTestResult, setProxyTestResult] = useState<any>(null);
   const [searchTestResult, setSearchTestResult] = useState<any>(null);
+  const [directTestResult, setDirectTestResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [proxyLoading, setProxyLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [directLoading, setDirectLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proxyError, setProxyError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [directError, setDirectError] = useState<string | null>(null);
 
   const runTest = async () => {
     setLoading(true);
@@ -84,10 +87,31 @@ export default function TestPage() {
     }
   };
 
+  const runDirectTest = async () => {
+    setDirectLoading(true);
+    setDirectError(null);
+    setDirectTestResult(null);
+
+    try {
+      console.log('🔗 Testing backend directly...');
+      const response = await fetch('/api/test-proxy');
+      const data = await response.json();
+      
+      console.log('📥 Direct test result:', data);
+      setDirectTestResult(data);
+    } catch (err) {
+      console.error('❌ Direct test failed:', err);
+      setDirectError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setDirectLoading(false);
+    }
+  };
+
   useEffect(() => {
     runTest();
     runProxyTest();
     runSearchTest();
+    runDirectTest();
   }, []);
 
   return (
@@ -289,6 +313,70 @@ export default function TestPage() {
                 <h3 className="text-gray-800 font-medium mb-2">Raw Search Result</h3>
                 <pre className="text-xs text-gray-600 overflow-auto">
                   {JSON.stringify(searchTestResult, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Direct Backend Test */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-800">Direct Backend Test</h2>
+            <button
+              onClick={runDirectTest}
+              disabled={directLoading}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {directLoading ? 'Testing...' : 'Run Direct Test'}
+            </button>
+          </div>
+
+          {directLoading && (
+            <div className="flex items-center space-x-2 text-orange-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+              <span>Testing backend directly...</span>
+            </div>
+          )}
+
+          {directError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <h3 className="text-red-800 font-medium mb-2">Direct Test Error</h3>
+              <p className="text-red-600 text-sm">{directError}</p>
+            </div>
+          )}
+
+          {directTestResult && (
+            <div className="space-y-4">
+              {directTestResult.success ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="text-green-800 font-medium mb-2">✅ Direct Test Successful</h3>
+                  <div className="text-sm text-green-700 space-y-1">
+                    <p><strong>Backend URL:</strong> {directTestResult.backendUrl}</p>
+                    <p><strong>Test URL:</strong> {directTestResult.testUrl}</p>
+                    <p><strong>Response Status:</strong> {directTestResult.responseStatus}</p>
+                    <p><strong>Data Length:</strong> {directTestResult.dataLength}</p>
+                    <p><strong>Message:</strong> {directTestResult.message}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <h3 className="text-red-800 font-medium mb-2">❌ Direct Test Failed</h3>
+                  <div className="text-sm text-red-700 space-y-1">
+                    <p><strong>Error:</strong> {directTestResult.error}</p>
+                    <p><strong>Message:</strong> {directTestResult.message}</p>
+                    {directTestResult.url && <p><strong>URL:</strong> {directTestResult.url}</p>}
+                    {directTestResult.status && <p><strong>Status:</strong> {directTestResult.status}</p>}
+                    {directTestResult.errorText && <p><strong>Error Text:</strong> {directTestResult.errorText}</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* Raw Direct Result */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-gray-800 font-medium mb-2">Raw Direct Result</h3>
+                <pre className="text-xs text-gray-600 overflow-auto">
+                  {JSON.stringify(directTestResult, null, 2)}
                 </pre>
               </div>
             </div>

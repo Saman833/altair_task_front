@@ -15,10 +15,17 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const path = url.pathname.replace('/api/proxy', '');
     
-    // Construct the full backend URL
-    const fullBackendUrl = `${backendUrl}${path}`;
+    // Clean up backend URL (remove trailing slash if present)
+    const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
     
-    console.log('🔄 Proxy request to:', fullBackendUrl);
+    // Construct the full backend URL
+    const fullBackendUrl = `${cleanBackendUrl}${path}`;
+    
+    console.log('🔄 Proxy GET request details:');
+    console.log('  Original URL:', request.url);
+    console.log('  Path:', path);
+    console.log('  Backend URL:', cleanBackendUrl);
+    console.log('  Full Backend URL:', fullBackendUrl);
     
     const response = await fetch(fullBackendUrl, {
       method: 'GET',
@@ -30,6 +37,7 @@ export async function GET(request: NextRequest) {
     });
 
     console.log('📥 Proxy response status:', response.status);
+    console.log('📥 Proxy response headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -80,14 +88,21 @@ export async function POST(request: NextRequest) {
     const url = new URL(request.url);
     const path = url.pathname.replace('/api/proxy', '');
     
+    // Clean up backend URL (remove trailing slash if present)
+    const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
+    
     // Construct the full backend URL
-    const fullBackendUrl = `${backendUrl}${path}`;
+    const fullBackendUrl = `${cleanBackendUrl}${path}`;
     
     // Get the request body
     const body = await request.json();
     
-    console.log('🔄 Proxy POST request to:', fullBackendUrl);
-    console.log('📤 Request body:', body);
+    console.log('🔄 Proxy POST request details:');
+    console.log('  Original URL:', request.url);
+    console.log('  Path:', path);
+    console.log('  Backend URL:', cleanBackendUrl);
+    console.log('  Full Backend URL:', fullBackendUrl);
+    console.log('  Request body:', body);
     
     const response = await fetch(fullBackendUrl, {
       method: 'POST',
@@ -100,6 +115,7 @@ export async function POST(request: NextRequest) {
     });
 
     console.log('📥 Proxy response status:', response.status);
+    console.log('📥 Proxy response headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       const errorText = await response.text();
