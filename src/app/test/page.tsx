@@ -68,7 +68,7 @@ export default function TestPage() {
         category: 'information' as const
       };
       
-      const response = await fetch('/api/proxy/search_query', {
+      const response = await fetch('/api/proxy/contents/search_query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -262,7 +262,7 @@ export default function TestPage() {
         {/* Search Test */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">Search Test (POST /search_query)</h2>
+            <h2 className="text-xl font-semibold text-gray-800">Search Test (POST /contents/search_query)</h2>
             <button
               onClick={runSearchTest}
               disabled={searchLoading}
@@ -293,7 +293,7 @@ export default function TestPage() {
                   <h3 className="text-green-800 font-medium mb-2">✅ Search Test Successful</h3>
                   <div className="text-sm text-green-700 space-y-1">
                     <p><strong>Data Length:</strong> {searchTestResult.length} items</p>
-                    <p><strong>Search URL:</strong> /api/proxy/search_query</p>
+                    <p><strong>Search URL:</strong> /api/proxy/contents/search_query</p>
                     <p><strong>Method:</strong> POST</p>
                     <p><strong>Message:</strong> Search functionality is working correctly!</p>
                   </div>

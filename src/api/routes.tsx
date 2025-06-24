@@ -155,7 +155,7 @@ export class ContentApiService {
                 Object.entries(cleanedQuery).filter(([_, value]) => value !== null)
             );
 
-            const url = this.getRequestUrl('/search_query');
+            const url = this.getRequestUrl('/contents/search_query');
             console.log('📡 Making search POST request to:', url);
             console.log('📤 Search query payload:', finalQuery);
             
