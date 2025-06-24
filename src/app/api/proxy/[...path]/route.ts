@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
   try {
     // Get the path from the request URL
     const url = new URL(request.url);
-    const path = url.pathname.replace('/api/proxy', '');
+    const pathSegments = url.pathname.split('/').slice(3); // Remove /api/proxy/
+    const path = '/' + pathSegments.join('/');
     
     // Clean up backend URL (remove trailing slash if present)
     const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
@@ -21,8 +22,9 @@ export async function GET(request: NextRequest) {
     // Construct the full backend URL
     const fullBackendUrl = `${cleanBackendUrl}${path}`;
     
-    console.log('🔄 Proxy GET request details:');
+    console.log('🔄 Proxy GET request details (catch-all):');
     console.log('  Original URL:', request.url);
+    console.log('  Path segments:', pathSegments);
     console.log('  Path:', path);
     console.log('  Backend URL:', cleanBackendUrl);
     console.log('  Full Backend URL:', fullBackendUrl);
@@ -86,7 +88,8 @@ export async function POST(request: NextRequest) {
   try {
     // Get the path from the request URL
     const url = new URL(request.url);
-    const path = url.pathname.replace('/api/proxy', '');
+    const pathSegments = url.pathname.split('/').slice(3); // Remove /api/proxy/
+    const path = '/' + pathSegments.join('/');
     
     // Clean up backend URL (remove trailing slash if present)
     const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
@@ -97,8 +100,9 @@ export async function POST(request: NextRequest) {
     // Get the request body
     const body = await request.json();
     
-    console.log('🔄 Proxy POST request details:');
+    console.log('🔄 Proxy POST request details (catch-all):');
     console.log('  Original URL:', request.url);
+    console.log('  Path segments:', pathSegments);
     console.log('  Path:', path);
     console.log('  Backend URL:', cleanBackendUrl);
     console.log('  Full Backend URL:', fullBackendUrl);
