@@ -1,6 +1,6 @@
 // API routes configuration and handlers
 
-import { ContentSearchResponse, ContentItem } from './types';
+import { ContentSearchResponse, ContentItem, SearchQuery } from './types';
 
 // Use environment variable for API URL - no hardcoded fallback
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -23,10 +23,13 @@ console.log('🌍 Environment:', process.env.NODE_ENV);
 
 export class ContentApiService {
     private baseUrl: string;
+    private useProxy: boolean;
 
-    constructor(baseUrl?: string) {
+    constructor(baseUrl?: string, useProxy: boolean = true) {
         this.baseUrl = baseUrl || API_BASE_URL || '';
+        this.useProxy = useProxy;
         console.log('🚀 ContentApiService initialized with URL:', this.baseUrl);
+        console.log('🔄 Using proxy:', this.useProxy);
         
         if (!this.baseUrl) {
             console.error('❌ No API URL provided! Please set NEXT_PUBLIC_API_URL environment variable.');
@@ -35,21 +38,28 @@ export class ContentApiService {
     }
 
     /**
+     * Get the request URL - either direct or through proxy
+     */
+    private getRequestUrl(path: string): string {
+        if (this.useProxy) {
+            // Use the proxy route to bypass CORS
+            return `/api/proxy${path}`;
+        } else {
+            // Direct request to backend (will have CORS issues)
+            return `${this.baseUrl}${path}`;
+        }
+    }
+
+    /**
      * Get all public content summary
      */
     async getPublicSummary(): Promise<ContentSearchResponse> {
-        if (!this.baseUrl) {
+        if (!this.baseUrl && !this.useProxy) {
             throw new Error('API URL not configured. Please set NEXT_PUBLIC_API_URL environment variable.');
         }
 
-        // Ensure the URL ends with the correct path and includes port 8000 if needed
-        let url = this.baseUrl;
-        
-        // If the URL doesn't end with /contents/, add it
-        if (!url.endsWith('/contents/')) {
-            url = url.endsWith('/') ? `${url}contents/` : `${url}/contents/`;
-        }
-            
+        // Use the proxy route to bypass CORS
+        const url = this.getRequestUrl('/contents/');
         console.log('📡 Making request to:', url);
         
         try {
@@ -87,11 +97,11 @@ export class ContentApiService {
      * Get content by ID
      */
     async getContentById(contentId: string): Promise<ContentItem> {
-        if (!this.baseUrl) {
+        if (!this.baseUrl && !this.useProxy) {
             throw new Error('API URL not configured. Please set NEXT_PUBLIC_API_URL environment variable.');
         }
 
-        const url = `${this.baseUrl}/contents/${contentId}`;
+        const url = this.getRequestUrl(`/contents/${contentId}`);
         console.log('📡 Making request to:', url);
         
         try {
@@ -125,40 +135,37 @@ export class ContentApiService {
     /**
      * Search content with filters
      */
-    async searchContent(searchQuery: any): Promise<ContentSearchResponse> {
-        if (!this.baseUrl) {
+    async searchContent(searchQuery: SearchQuery): Promise<ContentSearchResponse> {
+        if (!this.baseUrl && !this.useProxy) {
             throw new Error('API URL not configured. Please set NEXT_PUBLIC_API_URL environment variable.');
         }
 
         try {
-            const queryParams = new URLSearchParams();
-            
-            // Add search parameters
-            if (searchQuery.keywords) {
-                queryParams.append('keywords', searchQuery.keywords);
-            }
-            if (searchQuery.startDate) {
-                queryParams.append('start_date', searchQuery.startDate);
-            }
-            if (searchQuery.endDate) {
-                queryParams.append('end_date', searchQuery.endDate);
-            }
-            if (searchQuery.category) {
-                queryParams.append('category', searchQuery.category);
-            }
-            if (searchQuery.source) {
-                queryParams.append('source', searchQuery.source);
-            }
+            // Clean up the search query - convert empty strings to undefined and format dates
+            const cleanedQuery: SearchQuery = {
+                keywords: searchQuery.keywords || null,
+                start_date_duration: searchQuery.start_date_duration || null,
+                end_date_duration: searchQuery.end_date_duration || null,
+                category: searchQuery.category || null,
+                source: searchQuery.source || null
+            };
 
-            const url = `${this.baseUrl}/contents/?${queryParams.toString()}`;
-            console.log('📡 Making search request to:', url);
+            // Remove null values
+            const finalQuery = Object.fromEntries(
+                Object.entries(cleanedQuery).filter(([_, value]) => value !== null)
+            );
+
+            const url = this.getRequestUrl('/contents/search_query');
+            console.log('📡 Making search POST request to:', url);
+            console.log('📤 Search query payload:', finalQuery);
             
             const response = await fetch(url, {
-                method: 'GET',
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                 },
+                body: JSON.stringify(finalQuery),
                 signal: AbortSignal.timeout(15000),
             });
 

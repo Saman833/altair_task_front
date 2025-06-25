@@ -34,24 +34,23 @@ export interface ContentItem {
 export type ContentSearchResponse = ContentItem[];
 
 export interface SearchQuery {
-    // Search keywords/terms
-    keywords?: string;
+    // Search keywords/terms - backend expects List[str]
+    keywords?: string[] | null;
     
-    // Date filters
-    startDate?: Date | string;
-    endDate?: Date | string;
-    Date_Mentiond?: Date | string;
+    // Date filters - backend expects datetime objects
+    start_date_duration?: string | null;  // Changed to match backend
+    end_date_duration?: string | null;    // Changed to match backend
     
     // Category filter
-    category?: Category;
+    category?: Category | null;
     // Source filter
-    source?: Source;
+    source?: Source | null;
 }
 
 // Example usage:
 // const query: SearchQuery = {
-//     keywords: "apartment",
-//     startDate: "2024-03-20",
-//     endDate: "2024-03-21",
-//     category: "residential"
+//     keywords: ["apartment", "house"],
+//     start_date_duration: "2024-03-20",
+//     end_date_duration: "2024-03-21",
+//     category: "information"
 // } 
