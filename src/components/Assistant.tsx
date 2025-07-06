@@ -185,6 +185,8 @@ export default function Assistant() {
                 }
             }
         }, 3000);
+        
+        console.log("⏰ Silence detection timer started (3 seconds)");
     };
 
     const resetSilenceTimer = () => {
@@ -222,8 +224,8 @@ export default function Assistant() {
                             const average = arraySum / array.length;
                             
                             // If there's significant audio activity, reset the silence timer
-                            if (average > 30) {
-                                console.log("🎤 Speech detected, resetting silence timer");
+                            if (average > 20) { // Lowered threshold for better sensitivity
+                                console.log("🎤 Audio activity detected (level:", average, "), resetting silence timer");
                                 resetSilenceTimer();
                             }
                         }
@@ -265,6 +267,12 @@ export default function Assistant() {
                     updateRealTimeTranscript(currentTranscript);
                     realTimeTranscriptGlobal = currentTranscript;
                     console.log("📝 Current transcript:", currentTranscript);
+                    
+                    // Reset silence timer when speech is detected
+                    if (isRecording) {
+                        console.log("🎤 Speech detected, resetting silence timer");
+                        resetSilenceTimer();
+                    }
                 }
             };
             
@@ -346,6 +354,8 @@ export default function Assistant() {
             };
             
             mediaRecorderRef.current.onstop = () => {
+                console.log("🎤 Recording stopped, processing results...");
+                
                 // Stop speech recognition
                 if (recognitionRef.current) {
                     recognitionRef.current.stop();
@@ -441,6 +451,19 @@ export default function Assistant() {
             
             // Start silence detection
             startSilenceDetection();
+            
+            // Add a backup timer (10 seconds max recording time)
+            setTimeout(() => {
+                if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                    console.log("⏰ Backup timer: Maximum recording time reached, stopping recording");
+                    mediaRecorderRef.current.stop();
+                    setIsRecording(false);
+                    
+                    if (mediaRecorderRef.current.stream) {
+                        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+                    }
+                }
+            }, 10000);
             
             // Enable audio detection for this recording session
             if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
