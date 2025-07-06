@@ -13,8 +13,6 @@ export default function Assistant() {
     const [status, setStatus] = useState('ready');
     const [messages, setMessages] = useState<Message[]>([]);
     const [realTimeTranscript, setRealTimeTranscript] = useState('');
-    const [lastTranscriptLength, setLastTranscriptLength] = useState(0);
-    const [lastResetTime, setLastResetTime] = useState(0);
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -26,6 +24,9 @@ export default function Assistant() {
     const microphoneRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
     const conversationRef = useRef<HTMLDivElement>(null);
+
+    let realTimeTranscriptGlobal = "";
+    let isTranscribing = false;
 
     const updateStatus = (message: string, className: string) => {
         setStatus(className);
@@ -41,7 +42,9 @@ export default function Assistant() {
     };
 
     const updateRealTimeTranscript = (text: string) => {
+        // Remove any existing real-time transcript
         setRealTimeTranscript(text);
+        realTimeTranscriptGlobal = text;
     };
 
     const scrollToBottom = () => {
@@ -56,120 +59,62 @@ export default function Assistant() {
 
     const playAudio = (audioBase64: string) => {
         console.log("🎵 Received audio data, length:", audioBase64.length);
-        console.log("🎵 Audio data preview:", audioBase64.substring(0, 50) + "...");
         
-        try {
-            const audioData = atob(audioBase64);
-            const audioArray = new Uint8Array(audioData.length);
-            for (let i = 0; i < audioData.length; i++) {
-                audioArray[i] = audioData.charCodeAt(i);
-            }
-            
-            console.log("🔊 Audio array created, size:", audioArray.length);
-            
-            // Try different audio formats
-            const audioFormats = [
-                { type: 'audio/mpeg', name: 'MPEG' },
-                { type: 'audio/wav', name: 'WAV' },
-                { type: 'audio/mp3', name: 'MP3' },
-                { type: 'audio/mp4', name: 'MP4' }
-            ];
-            
-            let audioPlayed = false;
-            
-            for (const format of audioFormats) {
-                if (audioPlayed) break;
-                
-                try {
-                    const audioBlob = new Blob([audioArray], { type: format.type });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    const audio = new Audio(audioUrl);
-                    
-                    audio.onloadstart = () => console.log(`🎵 Audio loading started (${format.name})`);
-                    audio.oncanplay = () => console.log(`🎵 Audio can play (${format.name})`);
-                    audio.onplay = () => {
-                        console.log(`🎵 Audio playing started (${format.name})`);
-                        audioPlayed = true;
-                    };
-                    audio.onerror = (e) => console.error(`❌ Audio error (${format.name}):`, e);
-                    audio.onended = () => console.log(`🎵 Audio finished playing (${format.name})`);
-                    
-                    audio.play().then(() => {
-                        console.log(`✅ Audio playback started successfully (${format.name})`);
-                    }).catch(error => {
-                        console.error(`❌ Audio playback failed (${format.name}):`, error);
-                    });
-                    
-                    // If we get here without error, assume it worked
-                    audioPlayed = true;
-                } catch (error) {
-                    console.error(`❌ Failed to create audio with ${format.name}:`, error);
-                }
-            }
-            
-            if (!audioPlayed) {
-                console.error("❌ Failed to play audio with any format");
-            }
-            
-        } catch (error) {
-            console.error("❌ Error processing audio data:", error);
+        const audioData = atob(audioBase64);
+        const audioArray = new Uint8Array(audioData.length);
+        for (let i = 0; i < audioData.length; i++) {
+            audioArray[i] = audioData.charCodeAt(i);
         }
+        
+        console.log("🔊 Audio array created, size:", audioArray.length);
+        
+        const audioBlob = new Blob([audioArray], { type: 'audio/mpeg' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        
+        audio.onloadstart = () => console.log("🎵 Audio loading started");
+        audio.oncanplay = () => console.log("🎵 Audio can play");
+        audio.onplay = () => console.log("🎵 Audio playing started");
+        audio.onerror = (e) => console.error("❌ Audio error:", e);
+        audio.onended = () => console.log("🎵 Audio finished playing");
+        
+        audio.play().then(() => {
+            console.log("✅ Audio playback started successfully");
+        }).catch(error => {
+            console.error("❌ Audio playback failed:", error);
+        });
     };
 
     const initializeWebSocket = () => {
-        console.log("🔌 Initializing WebSocket connection to ws://localhost:8006/ws/voice");
         socketRef.current = new WebSocket("ws://localhost:8006/ws/voice");
         
         socketRef.current.onopen = () => {
-            console.log("✅ WebSocket connected successfully");
-            updateStatus("Ready to start conversation", "ready");
+            console.log("WebSocket connected");
         };
         
         socketRef.current.onmessage = (event) => {
-            console.log("📨 WebSocket message received:", event.data);
-            console.log("📨 Message type:", typeof event.data);
+            const data = JSON.parse(event.data);
             
-            try {
-                const data = JSON.parse(event.data);
-                console.log("📨 Parsed data:", data);
-                console.log("📨 Data type:", data.type);
-                console.log("📨 Data keys:", Object.keys(data));
-                
-                if (data.type === "transcription") {
-                    console.log("📝 Processing transcription:", data.text);
-                    addMessage("You: " + data.text, "user");
-                } else if (data.type === "realtime_transcription") {
-                    console.log("📝 Processing realtime transcription:", data.text);
-                    updateRealTimeTranscript(data.text);
-                } else if (data.type === "response") {
-                    console.log("🤖 Processing AI response:", data.text);
-                    addMessage("AI: " + data.text, "assistant");
-                } else if (data.type === "audio") {
-                    console.log("🎵 Processing audio response");
-                    console.log("🎵 Audio data length:", data.audio?.length);
-                    console.log("🎵 Audio data type:", typeof data.audio);
-                    console.log("🎵 Audio data preview:", data.audio?.substring(0, 50) + "...");
-                    playAudio(data.audio);
-                } else if (data.type === "error") {
-                    console.log("❌ Processing error:", data.message);
-                    updateStatus("Error: " + data.message, "error");
-                } else {
-                    console.log("❓ Unknown message type:", data.type);
-                }
-            } catch (error) {
-                console.error("❌ Error parsing WebSocket message:", error);
-                console.error("❌ Raw message:", event.data);
+            if (data.type === "transcription") {
+                addMessage("You: " + data.text, "user");
+            } else if (data.type === "realtime_transcription") {
+                updateRealTimeTranscript(data.text);
+            } else if (data.type === "response") {
+                addMessage("AI: " + data.text, "assistant");
+            } else if (data.type === "audio") {
+                playAudio(data.audio);
+            } else if (data.type === "error") {
+                updateStatus("Error: " + data.message, "error");
             }
         };
         
         socketRef.current.onerror = (error) => {
-            console.error("❌ WebSocket error:", error);
-            updateStatus("WebSocket connection failed - AI responses unavailable", "error");
+            console.error("WebSocket error:", error);
+            updateStatus("Connection error", "error");
         };
         
-        socketRef.current.onclose = (event) => {
-            console.log("🔌 WebSocket disconnected:", event.code, event.reason);
-            updateStatus("WebSocket disconnected - AI responses unavailable", "error");
+        socketRef.current.onclose = () => {
+            console.log("WebSocket disconnected");
         };
     };
 
@@ -179,26 +124,10 @@ export default function Assistant() {
             clearTimeout(silenceTimerRef.current);
         }
         
-        console.log("🔇 Starting silence detection timer (3 seconds)");
-        
         // Set timer for 3 seconds
         silenceTimerRef.current = setTimeout(() => {
-            console.log("🔇 Silence timer expired, checking if still recording...");
-            console.log("🔇 isRecording state:", isRecording);
-            console.log("🔇 MediaRecorder state:", mediaRecorderRef.current?.state);
-            
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+            if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                 console.log("🔇 3 seconds of silence detected, stopping recording");
-                
-                // Stop speech recognition first
-                if (recognitionRef.current) {
-                    recognitionRef.current.stop();
-                }
-                
-                // Remove real-time transcript
-                setRealTimeTranscript('');
-                
-                // Stop the recording - this will trigger the onstop handler
                 mediaRecorderRef.current.stop();
                 setIsRecording(false);
                 
@@ -206,63 +135,53 @@ export default function Assistant() {
                 if (mediaRecorderRef.current.stream) {
                     mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
                 }
-                
-                // Wait a moment for any final recognition results, then process
-                setTimeout(() => {
-                    // Check if WebSocket is connected
-                    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-                        console.error("❌ WebSocket not connected, cannot send data");
-                        updateStatus("WebSocket not connected - AI responses unavailable", "error");
-                        
-                        // Add a mock response for testing
-                        setTimeout(() => {
-                            addMessage("AI: I received your message: '" + (realTimeTranscript || "audio recording") + "'. The WebSocket server is not running, so this is a mock response.", "assistant");
-                            updateStatus("Ready to start conversation", "ready");
-                        }, 1000);
-                        
-                        return;
-                    }
-                    
-                    // Send final transcript if available, otherwise send audio
-                    if (realTimeTranscript && realTimeTranscript.trim()) {
-                        console.log("📤 Sending final transcript:", realTimeTranscript);
-                        if (socketRef.current) {
-                            socketRef.current.send(JSON.stringify({
-                                type: "final_transcript",
-                                data: realTimeTranscript.trim()
-                            }));
-                        }
-                    } else {
-                        console.log("📤 No transcript available, sending audio for processing");
-                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const base64Audio = (reader.result as string).split(',')[1];
-                            if (socketRef.current) {
-                                socketRef.current.send(JSON.stringify({
-                                    type: "final_audio",
-                                    data: base64Audio
-                                }));
-                            }
-                        };
-                        reader.readAsDataURL(audioBlob);
-                    }
-                    
-                    updateStatus("Processing...", "processing");
-                }, 500);
-            } else {
-                console.log("🔇 Silence timer expired but MediaRecorder not in recording state");
             }
         }, 3000);
     };
 
     const resetSilenceTimer = () => {
-        console.log("🔄 Resetting silence timer");
         if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
         }
         if (isRecording) {
             startSilenceDetection();
+        }
+    };
+
+    const setupAudioDetection = () => {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    audioContextRef.current = new AudioContext();
+                    analyserRef.current = audioContextRef.current.createAnalyser();
+                    microphoneRef.current = audioContextRef.current.createMediaStreamSource(stream);
+                    scriptProcessorRef.current = audioContextRef.current.createScriptProcessor(2048, 1, 1);
+                    
+                    analyserRef.current.smoothingTimeConstant = 0.8;
+                    analyserRef.current.fftSize = 1024;
+                    
+                    microphoneRef.current.connect(analyserRef.current);
+                    analyserRef.current.connect(scriptProcessorRef.current);
+                    scriptProcessorRef.current.connect(audioContextRef.current.destination);
+                    
+                    scriptProcessorRef.current.onaudioprocess = function() {
+                        if (!isRecording) return;
+                        
+                        if (analyserRef.current) {
+                            const array = new Uint8Array(analyserRef.current.frequencyBinCount);
+                            analyserRef.current.getByteFrequencyData(array);
+                            const arraySum = array.reduce((a, value) => a + value);
+                            const average = arraySum / array.length;
+                            
+                            // If there's significant audio activity, reset the silence timer
+                            if (average > 30) {
+                                console.log("🎤 Speech detected, resetting silence timer");
+                                resetSilenceTimer();
+                            }
+                        }
+                    };
+                })
+                .catch(err => console.log("Audio activity detection not available:", err));
         }
     };
 
@@ -282,6 +201,7 @@ export default function Assistant() {
                 let interimTranscript = '';
                 let finalTranscript = '';
                 
+                // Accumulate all results
                 for (let i = 0; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
@@ -291,27 +211,18 @@ export default function Assistant() {
                     }
                 }
                 
+                // Update real-time transcript with accumulated text
                 if (finalTranscript || interimTranscript) {
                     const currentTranscript = finalTranscript + interimTranscript;
                     updateRealTimeTranscript(currentTranscript);
+                    realTimeTranscriptGlobal = currentTranscript;
                     console.log("📝 Current transcript:", currentTranscript);
-                    
-                    // Only reset silence timer if there's new content and enough time has passed
-                    const now = Date.now();
-                    const timeSinceLastReset = now - lastResetTime;
-                    const hasNewContent = currentTranscript.length > lastTranscriptLength;
-                    
-                    if (hasNewContent && timeSinceLastReset > 1000) { // Only reset if new content and 1+ second passed
-                        console.log("🔄 New speech content detected, resetting silence timer");
-                        setLastResetTime(now);
-                        setLastTranscriptLength(currentTranscript.length);
-                        resetSilenceTimer();
-                    }
                 }
             };
             
             recognitionRef.current.onerror = (event: any) => {
                 console.error("Speech recognition error:", event.error);
+                // Restart recognition if it fails
                 if (isRecording && recognitionRef.current) {
                     setTimeout(() => {
                         try {
@@ -325,6 +236,7 @@ export default function Assistant() {
             
             recognitionRef.current.onend = () => {
                 console.log("🎤 Real-time speech recognition ended");
+                // Restart recognition if still recording
                 if (isRecording && recognitionRef.current) {
                     setTimeout(() => {
                         try {
@@ -354,6 +266,7 @@ export default function Assistant() {
             // Start real-time speech recognition
             if (recognitionRef.current) {
                 recognitionRef.current.start();
+                realTimeTranscriptGlobal = "";
             }
             
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -366,158 +279,56 @@ export default function Assistant() {
             };
             
             mediaRecorderRef.current.onstop = () => {
-                // Only process if this is a manual stop (not silence detection)
-                // Silence detection will handle its own processing
-                if (isRecording) {
-                    // Stop speech recognition
-                    if (recognitionRef.current) {
-                        recognitionRef.current.stop();
-                    }
-                    
-                    // Remove real-time transcript
-                    setRealTimeTranscript('');
-                    
-                    // Wait a moment for any final recognition results
-                    setTimeout(() => {
-                        // Check if WebSocket is connected
-                        if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-                            console.error("❌ WebSocket not connected, cannot send data");
-                            updateStatus("WebSocket not connected - AI responses unavailable", "error");
-                            return;
+                // Stop speech recognition
+                if (recognitionRef.current) {
+                    recognitionRef.current.stop();
+                }
+                
+                // Remove real-time transcript
+                setRealTimeTranscript('');
+                
+                // Wait a moment for any final recognition results
+                setTimeout(() => {
+                    // Send final transcript if available, otherwise send audio
+                    if (realTimeTranscriptGlobal && realTimeTranscriptGlobal.trim()) {
+                        console.log("📤 Sending final transcript:", realTimeTranscriptGlobal);
+                        if (socketRef.current) {
+                            socketRef.current.send(JSON.stringify({
+                                type: "final_transcript",
+                                data: realTimeTranscriptGlobal.trim()
+                            }));
                         }
-                        
-                        // Send final transcript if available, otherwise send audio
-                        if (realTimeTranscript && realTimeTranscript.trim()) {
-                            console.log("📤 Sending final transcript:", realTimeTranscript);
+                    } else {
+                        console.log("📤 No transcript available, sending audio for processing");
+                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const base64Audio = (reader.result as string).split(',')[1];
                             if (socketRef.current) {
                                 socketRef.current.send(JSON.stringify({
-                                    type: "final_transcript",
-                                    data: realTimeTranscript.trim()
+                                    type: "final_audio",
+                                    data: base64Audio
                                 }));
                             }
-                        } else {
-                            console.log("📤 No transcript available, sending audio for processing");
-                            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                                const base64Audio = (reader.result as string).split(',')[1];
-                                if (socketRef.current) {
-                                    socketRef.current.send(JSON.stringify({
-                                        type: "final_audio",
-                                        data: base64Audio
-                                    }));
-                                }
-                            };
-                            reader.readAsDataURL(audioBlob);
-                        }
-                        
-                        updateStatus("Processing...", "processing");
-                    }, 500);
-                }
+                        };
+                        reader.readAsDataURL(audioBlob);
+                    }
+                    
+                    updateStatus("Processing...", "processing");
+                }, 500); // Wait 500ms for final recognition results
             };
             
-            // Set up audio detection with the same stream
-            console.log("🎤 Setting up audio detection...");
-            audioContextRef.current = new AudioContext();
-            analyserRef.current = audioContextRef.current.createAnalyser();
-            microphoneRef.current = audioContextRef.current.createMediaStreamSource(stream);
-            scriptProcessorRef.current = audioContextRef.current.createScriptProcessor(2048, 1, 1);
-            
-            if (analyserRef.current) {
-                analyserRef.current.smoothingTimeConstant = 0.8;
-                analyserRef.current.fftSize = 1024;
-                console.log("🎤 Audio analyser configured");
-            }
-            
-            if (microphoneRef.current && analyserRef.current) {
-                microphoneRef.current.connect(analyserRef.current);
-                console.log("🎤 Microphone connected to analyser");
-            }
-            if (analyserRef.current && scriptProcessorRef.current) {
-                analyserRef.current.connect(scriptProcessorRef.current);
-                console.log("🎤 Analyser connected to script processor");
-            }
-            if (scriptProcessorRef.current && audioContextRef.current) {
-                scriptProcessorRef.current.connect(audioContextRef.current.destination);
-                console.log("🎤 Script processor connected to audio context");
-            }
-            
-            if (scriptProcessorRef.current) {
-                scriptProcessorRef.current.onaudioprocess = function() {
-                    if (!isRecording) return;
-                    
-                    if (analyserRef.current) {
-                        const array = new Uint8Array(analyserRef.current.frequencyBinCount);
-                        analyserRef.current.getByteFrequencyData(array);
-                        const arraySum = array.reduce((a, value) => a + value);
-                        const average = arraySum / array.length;
-                        
-                        // Debug: Log audio levels (only every 10th call to avoid spam)
-                        if (Math.random() < 0.1) {
-                            console.log("🎤 Audio level:", average);
-                        }
-                        
-                        // If there's significant audio activity, reset the silence timer
-                        if (average > 15) { // Lowered threshold from 30 to 15
-                            console.log("🎤 Speech detected, resetting silence timer");
-                            resetSilenceTimer();
-                        }
-                    }
-                };
-                console.log("🎤 Audio processing function set up");
-            }
-            
             mediaRecorderRef.current.start();
-            console.log("🎤 MediaRecorder started");
             updateStatus("Recording... Speak now! (will auto-stop after 3s silence)", "recording");
             setIsRecording(true);
             
             // Start silence detection
-            console.log("🔇 Starting silence detection");
             startSilenceDetection();
             
-            // Backup timeout: stop recording after 5 seconds if no new content
-            setTimeout(() => {
-                if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-                    console.log("⏰ Backup timeout: stopping recording after 5 seconds");
-                    mediaRecorderRef.current.stop();
-                    setIsRecording(false);
-                    
-                    // Stop all tracks to release microphone
-                    if (mediaRecorderRef.current.stream) {
-                        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-                    }
-                    
-                    // Process the recording
-                    setTimeout(() => {
-                        if (realTimeTranscript && realTimeTranscript.trim()) {
-                            console.log("📤 Sending final transcript:", realTimeTranscript);
-                            if (socketRef.current) {
-                                socketRef.current.send(JSON.stringify({
-                                    type: "final_transcript",
-                                    data: realTimeTranscript.trim()
-                                }));
-                            }
-                        } else {
-                            console.log("📤 No transcript available, sending audio for processing");
-                            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                                const base64Audio = (reader.result as string).split(',')[1];
-                                if (socketRef.current) {
-                                    socketRef.current.send(JSON.stringify({
-                                        type: "final_audio",
-                                        data: base64Audio
-                                    }));
-                                }
-                            };
-                            reader.readAsDataURL(audioBlob);
-                        }
-                        
-                        updateStatus("Processing...", "processing");
-                    }, 500);
-                }
-            }, 5000);
+            // Enable audio detection for this recording session
+            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                audioContextRef.current.resume();
+            }
             
         } catch (error) {
             updateStatus("Error: " + (error as Error).message, "error");
@@ -534,6 +345,7 @@ export default function Assistant() {
                 clearTimeout(silenceTimerRef.current);
             }
             
+            // Pause audio detection
             if (audioContextRef.current && audioContextRef.current.state === 'running') {
                 audioContextRef.current.suspend();
             }
@@ -541,6 +353,7 @@ export default function Assistant() {
     };
 
     useEffect(() => {
+        setupAudioDetection();
         initializeSpeechRecognition();
         initializeWebSocket();
         
