@@ -124,9 +124,48 @@ export default function Assistant() {
                 mediaRecorderRef.current.stop();
                 setIsRecording(false);
                 
+                // Stop all tracks to release microphone
                 if (mediaRecorderRef.current.stream) {
                     mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
                 }
+                
+                // Stop speech recognition
+                if (recognitionRef.current) {
+                    recognitionRef.current.stop();
+                }
+                
+                // Remove real-time transcript
+                setRealTimeTranscript('');
+                
+                // Wait a moment for any final recognition results
+                setTimeout(() => {
+                    // Send final transcript if available, otherwise send audio
+                    if (realTimeTranscript && realTimeTranscript.trim()) {
+                        console.log("📤 Sending final transcript:", realTimeTranscript);
+                        if (socketRef.current) {
+                            socketRef.current.send(JSON.stringify({
+                                type: "final_transcript",
+                                data: realTimeTranscript.trim()
+                            }));
+                        }
+                    } else {
+                        console.log("📤 No transcript available, sending audio for processing");
+                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const base64Audio = (reader.result as string).split(',')[1];
+                            if (socketRef.current) {
+                                socketRef.current.send(JSON.stringify({
+                                    type: "final_audio",
+                                    data: base64Audio
+                                }));
+                            }
+                        };
+                        reader.readAsDataURL(audioBlob);
+                    }
+                    
+                    updateStatus("Processing...", "processing");
+                }, 500); // Wait 500ms for final recognition results
             }
         }, 3000);
     };
@@ -174,6 +213,7 @@ export default function Assistant() {
                                 const arraySum = array.reduce((a, value) => a + value);
                                 const average = arraySum / array.length;
                                 
+                                // If there's significant audio activity, reset the silence timer
                                 if (average > 30) {
                                     console.log("🎤 Speech detected, resetting silence timer");
                                     resetSilenceTimer();
@@ -273,39 +313,42 @@ export default function Assistant() {
             };
             
             mediaRecorderRef.current.onstop = () => {
-                if (recognitionRef.current) {
-                    recognitionRef.current.stop();
-                }
-                
-                setRealTimeTranscript('');
-                
-                setTimeout(() => {
-                    if (realTimeTranscript && realTimeTranscript.trim()) {
-                        console.log("📤 Sending final transcript:", realTimeTranscript);
-                        if (socketRef.current) {
-                            socketRef.current.send(JSON.stringify({
-                                type: "final_transcript",
-                                data: realTimeTranscript.trim()
-                            }));
-                        }
-                    } else {
-                        console.log("📤 No transcript available, sending audio for processing");
-                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const base64Audio = (reader.result as string).split(',')[1];
-                            if (socketRef.current) {
-                                socketRef.current.send(JSON.stringify({
-                                    type: "final_audio",
-                                    data: base64Audio
-                                }));
-                            }
-                        };
-                        reader.readAsDataURL(audioBlob);
+                // Only process if this is a manual stop (not silence detection)
+                if (isRecording) {
+                    if (recognitionRef.current) {
+                        recognitionRef.current.stop();
                     }
                     
-                    updateStatus("Processing...", "processing");
-                }, 500);
+                    setRealTimeTranscript('');
+                    
+                    setTimeout(() => {
+                        if (realTimeTranscript && realTimeTranscript.trim()) {
+                            console.log("📤 Sending final transcript:", realTimeTranscript);
+                            if (socketRef.current) {
+                                socketRef.current.send(JSON.stringify({
+                                    type: "final_transcript",
+                                    data: realTimeTranscript.trim()
+                                }));
+                            }
+                        } else {
+                            console.log("📤 No transcript available, sending audio for processing");
+                            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                const base64Audio = (reader.result as string).split(',')[1];
+                                if (socketRef.current) {
+                                    socketRef.current.send(JSON.stringify({
+                                        type: "final_audio",
+                                        data: base64Audio
+                                    }));
+                                }
+                            };
+                            reader.readAsDataURL(audioBlob);
+                        }
+                        
+                        updateStatus("Processing...", "processing");
+                    }, 500);
+                }
             };
             
             mediaRecorderRef.current.start();
