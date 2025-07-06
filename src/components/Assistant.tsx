@@ -220,10 +220,11 @@ export default function Assistant() {
                     // Restart the timer
                     startSilenceDetection();
                 }
-            }, 3000);
-            
-            console.log("⏰ Silence detection timer started (3 seconds)");
-        };
+            }
+        }, 3000);
+        
+        console.log("⏰ Silence detection timer started (3 seconds)");
+    };
 
     const resetSilenceTimer = () => {
         if (silenceTimerRef.current) {
