@@ -323,11 +323,35 @@ export default function Assistant() {
             
             recognitionRef.current.onend = () => {
                 console.log("🎤 Real-time speech recognition ended");
-                // Restart recognition if still recording
-                if (isRecording && recognitionRef.current) {
+                
+                // Check if we should stop recording due to silence
+                if (isRecording) {
+                    const timeSinceLastChange = Date.now() - lastTranscriptChangeTime;
+                    if (timeSinceLastChange >= 2000) { // If 2+ seconds since last meaningful speech
+                        console.log("🔇 Speech recognition ended after silence, stopping recording");
+                        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                            mediaRecorderRef.current.stop();
+                            setIsRecording(false);
+                            
+                            // Stop all tracks to release microphone
+                            if (mediaRecorderRef.current.stream) {
+                                mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+                            }
+                            
+                            // Clear silence timer
+                            if (silenceTimerRef.current) {
+                                clearTimeout(silenceTimerRef.current);
+                            }
+                        }
+                        return; // Don't restart recognition
+                    }
+                    
+                    // Otherwise, restart recognition if still recording
                     setTimeout(() => {
                         try {
-                            recognitionRef.current.start();
+                            if (isRecording && recognitionRef.current) {
+                                recognitionRef.current.start();
+                            }
                         } catch (e) {
                             console.error("Failed to restart recognition:", e);
                         }
