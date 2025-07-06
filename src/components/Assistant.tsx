@@ -21,7 +21,6 @@ export default function Assistant() {
     const socketRef = useRef<WebSocket | null>(null);
     const recognitionRef = useRef<any>(null);
     const recognitionRunningRef = useRef<boolean>(false);
-    const startQueuedRef = useRef<boolean>(false);
     const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -46,17 +45,17 @@ export default function Assistant() {
         const words = normalizeText(text).split(' ').filter(Boolean);
         const set = assistantWordSetRef.current;
         words.forEach(w => set.add(w));
-        // Keep only last ~300 words to bound memory
-        if (set.size > 300) {
-            assistantWordSetRef.current = new Set(Array.from(set).slice(-300));
+        // Keep only last ~200 words to bound memory (reduced from 300)
+        if (set.size > 200) {
+            assistantWordSetRef.current = new Set(Array.from(set).slice(-200));
         }
     };
 
     const looksLikeEcho = (userTxt: string) => {
         const userWords = normalizeText(userTxt).split(' ').filter(Boolean);
-        if (userWords.length < 4) return false; // less than 4 words passes through
+        if (userWords.length < 5) return false; // Require at least 5 words for echo detection (less sensitive)
         const shared = userWords.filter(w => assistantWordSetRef.current.has(w)).length;
-        return shared / userWords.length >= 0.85; // 85% or more overlap considered echo
+        return shared / userWords.length >= 0.9; // Increased to 90% for less sensitivity
     };
 
     const updateStatus = (message: string, className: string) => {
@@ -109,6 +108,8 @@ export default function Assistant() {
         scrollToBottom();
     }, [messages, realTimeTranscript]);
 
+    // Removed queueRestart function - using pure half-duplex mode instead
+
     const playAudio = (audioBase64: string) => {
         console.log("🎵 Received audio data, length:", audioBase64.length);
         
@@ -139,14 +140,14 @@ export default function Assistant() {
             console.log("🎵 Audio finished playing");
             ttsPlayingRef.current = false;
 
-            // Restart recording after TTS
+            // Restart recording after TTS - this is the ONLY place recording restarts after TTS
             if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
                 setTimeout(() => {
                     if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
                         console.log("🔄 Restarting mic after TTS playback");
                         handleStartRecording();
                     }
-                }, 600); // allow echo tail to fade
+                }, 1000); // Increased delay to ensure echo tail completely fades
             }
         };
         
@@ -225,15 +226,15 @@ export default function Assistant() {
             clearTimeout(silenceTimerRef.current);
         }
         
-        // Set timer for 3 seconds
+        // Set timer for 4 seconds (less sensitive)
         silenceTimerRef.current = setTimeout(() => {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-                // Check if transcript has been stable for 3 seconds
+                // Check if transcript has been stable for 4 seconds
                 const timeSinceLastChange = Date.now() - lastTranscriptChangeRef.current;
                 console.log("⏰ Silence timer fired - time since last change:", timeSinceLastChange, "ms");
                 
-                if (timeSinceLastChange >= 3000) {
-                    console.log("🔇 3 seconds of silence detected (no transcript changes), stopping recording");
+                if (timeSinceLastChange >= 4000) {
+                    console.log("🔇 4 seconds of silence detected (no transcript changes), stopping recording");
                     console.log("📝 Final transcript before stopping:", realTimeTranscriptRef.current);
                     console.log("🛑 Calling mediaRecorder.stop() from silence timer");
                     
@@ -253,34 +254,6 @@ export default function Assistant() {
                     
                     // Clear the timer
                     silenceTimerRef.current = null;
-                    
-                    // Fallback: If onstop doesn't fire, manually send the message
-                    setTimeout(() => {
-                        if (requestSentRef.current) {
-                            console.log("🚫 Duplicate send prevented (fallback path)");
-                            return;
-                        }
-                        if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
-                            console.log("📤 Fallback: Sending message to backend");
-                            const message = {
-                                type: "final_transcript",
-                                data: realTimeTranscriptRef.current.trim()
-                            };
-                            requestSentRef.current = true;
-                            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                                try {
-                                    socketRef.current.send(JSON.stringify(message));
-                                    console.log("📤 Fallback message sent successfully");
-                                } catch (error) {
-                                    console.error("❌ Error sending fallback message:", error);
-                                    sendMockResponse(realTimeTranscriptRef.current.trim());
-                                }
-                            } else {
-                                console.log("❌ WebSocket not connected for fallback, using mock response");
-                                sendMockResponse(realTimeTranscriptRef.current.trim());
-                            }
-                        }
-                    }, 1000); // Wait 1 second for onstop to fire, then use fallback
                 } else {
                     console.log("⏰ Transcript changed recently, continuing recording...");
                     // Restart the timer
@@ -289,9 +262,9 @@ export default function Assistant() {
             } else {
                 console.log("⏰ Silence timer fired but not recording anymore");
             }
-        }, 3000);
+        }, 4000);
         
-        console.log("⏰ Silence detection timer started (3 seconds)");
+        console.log("⏰ Silence detection timer started (4 seconds)");
     };
 
     const resetSilenceTimer = () => {
@@ -374,15 +347,22 @@ export default function Assistant() {
                 if (finalTranscript || interimTranscript) {
                     const currentTranscript = finalTranscript + interimTranscript;
 
-                    // Filter out noise: require >=3 words OR avg conf >=0.6
+                    // Filter out noise: require >=2 words OR avg conf >=0.4 (less sensitive)
                     const wordsArr = normalizeText(currentTranscript).split(' ').filter(Boolean);
-                    if (containsEmoji(currentTranscript) || alphabeticRatio(currentTranscript) < 0.6) {
+                    if (containsEmoji(currentTranscript) || alphabeticRatio(currentTranscript) < 0.4) {
                         console.log("🛑 Dropping transcript due to emoji or low alphabetic ratio");
                         return;
                     }
 
-                    if (wordsArr.length < 3 && avgConfidence < 0.6) {
-                        // Ignore very short, low confidence snippets
+                    if (wordsArr.length < 2 && avgConfidence < 0.4) {
+                        // Ignore very short, low confidence snippets (less strict)
+                        console.log("🛑 Dropping transcript due to low confidence/short length");
+                        return;
+                    }
+
+                    // Additional filter: ignore transcripts that are too similar to recent assistant text
+                    if (looksLikeEcho(currentTranscript)) {
+                        console.log("🛑 Dropping transcript due to echo detection");
                         return;
                     }
 
@@ -420,24 +400,13 @@ export default function Assistant() {
             recognitionRef.current.onend = () => {
                 console.log("🎤 Real-time speech recognition ended");
                 recognitionRunningRef.current = false;
-                // If a restart was queued, start it now
-                if (startQueuedRef.current && conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                    console.log("🔄 [onend] Queued recording will start after 1 s delay");
-                    startQueuedRef.current = false;
-                    setTimeout(() => {
-                        if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                            handleStartRecording();
-                        }
-                    }, 1000);
-                    return;
-                }
                 
                 // Check if we should stop recording due to silence
                 if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                     const timeSinceLastChange = Date.now() - lastTranscriptChangeRef.current;
                     console.log("⏰ Time since last transcript change:", timeSinceLastChange, "ms");
                     
-                    if (timeSinceLastChange >= 2000) { // If 2+ seconds since last meaningful speech
+                    if (timeSinceLastChange >= 4000) { // Increased from 3+ to 4+ seconds since last meaningful speech
                         console.log("🔇 Speech recognition ended after silence, stopping recording");
                         console.log("🛑 Calling mediaRecorder.stop() from onend handler");
                         
@@ -554,6 +523,7 @@ export default function Assistant() {
                 realTimeTranscriptRef.current = "";
                 lastTranscriptChangeRef.current = Date.now();
                 requestSentRef.current = false;
+                console.log("🔄 Reset request tracking for new recording session");
             }
             
             mediaRecorderRef.current.onstop = () => {
@@ -576,29 +546,15 @@ export default function Assistant() {
                     if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
                         // Robust echo filter using word-overlap heuristic
                         const currentTxt = realTimeTranscriptRef.current;
-                        if (containsEmoji(currentTxt) || alphabeticRatio(currentTxt) < 0.6) {
+                        if (containsEmoji(currentTxt) || alphabeticRatio(currentTxt) < 0.4) {
                             console.log("🛑 Dropping final transcript due to emoji or low alphabetic ratio");
                             updateStatus("Waiting for speech...", "waiting");
-                            if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                                setTimeout(() => {
-                                    if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                                        handleStartRecording();
-                                    }
-                                }, 800);
-                            }
                             return;
                         }
 
                         if (looksLikeEcho(currentTxt)) {
                             console.log("🛑 Echo detected – transcript dropped");
                             updateStatus("Waiting for speech...", "waiting");
-                            if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                                setTimeout(() => {
-                                    if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                                        handleStartRecording();
-                                    }
-                                }, 800);
-                            }
                             return;
                         }
 
@@ -647,13 +603,7 @@ export default function Assistant() {
                         }
                         if (audioChunksRef.current.length === 0) {
                             console.log("⚠️ No audio chunks recorded; user probably stayed silent.");
-                            // Do NOT queue another restart immediately; wait 1s then restart to avoid tight loops
                             updateStatus("Waiting for speech...", "waiting");
-                            setTimeout(() => {
-                                if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                                    handleStartRecording();
-                                }
-                            }, 1000);
                             return;
                         }
                         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
@@ -699,19 +649,7 @@ export default function Assistant() {
                     updateStatus("Processing...", "processing");
                 }, 500); // Wait 500ms for final recognition results
 
-                // Queue next recording after recognition fully ends (but not while TTS is playing)
-                if (conversationActiveRef.current && !ttsPlayingRef.current) {
-                    console.log("⏳ Queuing next recording until recognition ends");
-                    startQueuedRef.current = true;
-                    // Safety fallback: if recognition isn't running, start after short delay
-                    setTimeout(() => {
-                        if (startQueuedRef.current && !recognitionRunningRef.current && conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current && !ttsPlayingRef.current) {
-                            console.log("⚠️ Recognition not running, starting queued recording via fallback after delay");
-                            startQueuedRef.current = false;
-                            handleStartRecording();
-                        }
-                    }, 1000);
-                }
+                // Half-duplex: mic restarts only after TTS finishes (audio.onended)
             };
             
             // Start silence detection
@@ -808,59 +746,63 @@ export default function Assistant() {
                         <button
                             onClick={handleStopRecording}
                             disabled={!isRecording && !conversationActiveRef.current && !recordingStartingRef.current}
-                            className="px-8 py-4 mx-2 text-lg font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                            className="px-8 py-4 mx-2 text-lg font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:cursor-not-allowed transition-colors"
                         >
                             🛑 Stop Recording
                         </button>
                     </div>
                     
-                    <div className={`p-4 mb-6 rounded-lg text-center font-bold ${
-                        status === 'ready' ? 'bg-green-100 text-green-800' :
-                        status === 'recording' ? 'bg-yellow-100 text-yellow-800' :
-                        status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                        'bg-red-100 text-red-800'
-                    }`}>
+                    <div className={`
+                        text-center p-4 rounded-lg mb-6 text-lg font-medium
+                        ${status === 'ready' ? 'bg-green-100 text-green-800' : ''}
+                        ${status === 'waiting' ? 'bg-yellow-100 text-yellow-800' : ''}
+                        ${status === 'processing' ? 'bg-blue-100 text-blue-800' : ''}
+                        ${status === 'error' ? 'bg-red-100 text-red-800' : ''}
+                    `}>
                         {status === 'ready' && 'Ready to start conversation'}
-                        {status === 'recording' && 'Recording... Speak now! (will auto-stop after 3s silence)'}
+                        {status === 'waiting' && 'Waiting for speech...'}
                         {status === 'processing' && 'Processing...'}
                         {status === 'error' && 'Error occurred'}
                     </div>
                     
+                    {realTimeTranscript && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                            <h3 className="text-lg font-semibold text-blue-800 mb-2">Real-time Transcript:</h3>
+                            <p className="text-blue-700">{realTimeTranscript}</p>
+                        </div>
+                    )}
+                    
                     <div 
                         ref={conversationRef}
-                        className="max-h-96 overflow-y-auto border border-gray-300 rounded-lg p-4 mb-6 bg-gray-50"
+                        className="bg-gray-50 rounded-lg p-4 h-96 overflow-y-auto"
                     >
-                        {messages.map((message, index) => (
-                            <div
-                                key={index}
-                                className={`mb-3 p-3 rounded-lg ${
-                                    message.sender === 'user' 
-                                        ? 'bg-blue-100 text-right ml-12' 
-                                        : 'bg-purple-100 text-left mr-12'
-                                }`}
-                            >
-                                {message.text}
+                        {messages.length === 0 ? (
+                            <div className="text-center text-gray-500 mt-8">
+                                <p className="text-lg">No messages yet. Start recording to begin the conversation!</p>
                             </div>
-                        ))}
-                        {realTimeTranscript && (
-                            <div className="mb-3 p-3 rounded-lg bg-blue-100 text-right ml-12 opacity-70 italic">
-                                You: {realTimeTranscript} ...
-                            </div>
+                        ) : (
+                            messages.map((message, index) => (
+                                <div 
+                                    key={index} 
+                                    className={`mb-4 p-3 rounded-lg ${
+                                        message.sender === 'user' 
+                                            ? 'bg-blue-100 text-blue-900 ml-8' 
+                                            : 'bg-green-100 text-green-900 mr-8'
+                                    }`}
+                                >
+                                    <div className="font-semibold mb-1">
+                                        {message.sender === 'user' ? 'You' : 'AI'}
+                                    </div>
+                                    <div>{message.text}</div>
+                                    <div className="text-xs text-gray-500 mt-1">
+                                        {message.timestamp.toLocaleTimeString()}
+                                    </div>
+                                </div>
+                            ))
                         )}
-                    </div>
-                    
-                    <div className="bg-blue-50 p-6 rounded-lg">
-                        <h3 className="text-lg font-semibold text-blue-800 mb-4">ℹ️ How to use:</h3>
-                        <div className="space-y-2 text-gray-700">
-                            <p>1. Click "Start Recording" to begin</p>
-                            <p>2. Allow microphone access when prompted</p>
-                            <p>3. Speak your message (will auto-stop after 3s silence)</p>
-                            <p>4. The AI will respond with both text and voice</p>
-                            <p>5. Say "reset" to start a new conversation</p>
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
     );
-} 
+}
