@@ -29,6 +29,7 @@ export default function Assistant() {
     const realTimeTranscriptRef = useRef<string>("");
     const lastTranscriptChangeRef = useRef<number>(0);
     const requestSentRef = useRef<boolean>(false);
+    const conversationActiveRef = useRef<boolean>(false);
 
     const updateStatus = (message: string, className: string) => {
         setStatus(className);
@@ -99,7 +100,9 @@ export default function Assistant() {
         audio.oncanplay = () => console.log("🎵 Audio can play");
         audio.onplay = () => console.log("🎵 Audio playing started");
         audio.onerror = (e) => console.error("❌ Audio error:", e);
-        audio.onended = () => console.log("🎵 Audio finished playing");
+        audio.onended = () => {
+            console.log("🎵 Audio finished playing");
+        };
         
         audio.play().then(() => {
             console.log("✅ Audio playback started successfully");
@@ -136,6 +139,14 @@ export default function Assistant() {
                     console.log("🤖 Adding AI response:", data.text);
                     addMessage("AI: " + data.text, "assistant");
                     updateStatus("Ready to start conversation", "ready");
+                    if (conversationActiveRef.current && !isRecording) {
+                        console.log("🔄 Auto-restarting recording after text response");
+                        setTimeout(() => {
+                            if (conversationActiveRef.current && !isRecording) {
+                                handleStartRecording();
+                            }
+                        }, 300);
+                    }
                 } else if (data.type === "audio") {
                     console.log("🎵 Playing audio response");
                     playAudio(data.audio);
@@ -536,6 +547,16 @@ export default function Assistant() {
                     
                     updateStatus("Processing...", "processing");
                 }, 500); // Wait 500ms for final recognition results
+
+                // Immediately start next recording if conversation is active
+                if (conversationActiveRef.current) {
+                    console.log("🔄 Auto-starting next recording immediately after send");
+                    setTimeout(() => {
+                        if (conversationActiveRef.current && !isRecording) {
+                            handleStartRecording();
+                        }
+                    }, 300);
+                }
             };
             
             mediaRecorderRef.current.start();
@@ -583,6 +604,7 @@ export default function Assistant() {
                 audioContextRef.current.suspend();
             }
         }
+        conversationActiveRef.current = false;
     };
 
     useEffect(() => {
@@ -605,6 +627,7 @@ export default function Assistant() {
                     console.log("Speech recognition already stopped");
                 }
             }
+            conversationActiveRef.current = false;
         };
     }, []);
 
@@ -619,14 +642,14 @@ export default function Assistant() {
                     <div className="text-center mb-8">
                         <button
                             onClick={handleStartRecording}
-                            disabled={isRecording}
+                            disabled={isRecording || conversationActiveRef.current}
                             className="px-8 py-4 mx-2 text-lg font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                         >
                             🎤 Start Recording
                         </button>
                         <button
                             onClick={handleStopRecording}
-                            disabled={!isRecording}
+                            disabled={!isRecording && !conversationActiveRef.current}
                             className="px-8 py-4 mx-2 text-lg font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                         >
                             🛑 Stop Recording
