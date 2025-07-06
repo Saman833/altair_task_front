@@ -14,18 +14,18 @@ The frontend automatically detects and connects to your backend using the follow
 Create a `.env.local` file in your project root:
 
 ```bash
-# Backend URL Configuration
-VITE_BACKEND_URL=http://your-backend-url.com
+# Backend URL Configuration (same as other files in the project)
+NEXT_PUBLIC_API_URL=http://your-backend-url.com
 
 # Examples:
-# VITE_BACKEND_URL=https://your-production-backend.com
-# VITE_BACKEND_URL=http://localhost:8006
-# VITE_BACKEND_URL=http://192.168.1.100:8006
+# NEXT_PUBLIC_API_URL=https://your-production-backend.com
+# NEXT_PUBLIC_API_URL=http://localhost:8006
+# NEXT_PUBLIC_API_URL=http://192.168.1.100:8006
 ```
 
 ### Backend URL Priority
 
-- **If `VITE_BACKEND_URL` is set**: Uses that URL
+- **If `NEXT_PUBLIC_API_URL` is set**: Uses that URL
 - **If not set**: Falls back to `http://localhost:8006`
 - **WebSocket**: Automatically converts HTTP/HTTPS to WS/WSS
 

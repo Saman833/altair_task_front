@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 
-// Type declaration for Vite environment variables
+// Type declaration for environment variables (matching project pattern)
 declare global {
-    interface ImportMeta {
-        readonly env: {
-            readonly VITE_BACKEND_URL?: string;
-        };
+    namespace NodeJS {
+        interface ProcessEnv {
+            readonly NEXT_PUBLIC_API_URL?: string;
+        }
     }
 }
 
@@ -169,15 +169,16 @@ export default function Assistant() {
     };
 
     const getBackendUrl = () => {
-        // Try Vite backend URL first, fallback to localhost
-        const viteBackendUrl = import.meta.env.VITE_BACKEND_URL;
-        const localhostUrl = "http://localhost:8006";
+        // Use the same approach as other files in the project
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL;
         
-        if (viteBackendUrl) {
-            console.log("🔗 Using Vite backend URL:", viteBackendUrl);
-            setBackendUrl(viteBackendUrl);
-            return viteBackendUrl;
+        if (backendUrl) {
+            console.log("🔗 Using NEXT_PUBLIC_API_URL:", backendUrl);
+            setBackendUrl(backendUrl);
+            return backendUrl;
         } else {
+            // Fallback to localhost (same as other files)
+            const localhostUrl = "http://localhost:8006";
             console.log("🔗 Using localhost fallback URL:", localhostUrl);
             setBackendUrl(localhostUrl);
             return localhostUrl;
