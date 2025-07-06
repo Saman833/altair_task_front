@@ -24,10 +24,10 @@ export default function Assistant() {
     const microphoneRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
     const conversationRef = useRef<HTMLDivElement>(null);
-
-    let realTimeTranscriptGlobal = "";
-    let isTranscribing = false;
-    let lastTranscriptChangeTime = 0;
+    
+    // Using refs so their values persist across renders and are reliably updated inside callbacks
+    const realTimeTranscriptRef = useRef<string>("");
+    const lastTranscriptChangeRef = useRef<number>(0);
 
     const updateStatus = (message: string, className: string) => {
         setStatus(className);
@@ -66,7 +66,7 @@ export default function Assistant() {
     const updateRealTimeTranscript = (text: string) => {
         // Remove any existing real-time transcript
         setRealTimeTranscript(text);
-        realTimeTranscriptGlobal = text;
+        realTimeTranscriptRef.current = text;
     };
 
     const scrollToBottom = () => {
@@ -177,12 +177,12 @@ export default function Assistant() {
         silenceTimerRef.current = setTimeout(() => {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                 // Check if transcript has been stable for 3 seconds
-                const timeSinceLastChange = Date.now() - lastTranscriptChangeTime;
+                const timeSinceLastChange = Date.now() - lastTranscriptChangeRef.current;
                 console.log("⏰ Silence timer fired - time since last change:", timeSinceLastChange, "ms");
                 
                 if (timeSinceLastChange >= 3000) {
                     console.log("🔇 3 seconds of silence detected (no transcript changes), stopping recording");
-                    console.log("📝 Final transcript before stopping:", realTimeTranscriptGlobal);
+                    console.log("📝 Final transcript before stopping:", realTimeTranscriptRef.current);
                     console.log("🛑 Calling mediaRecorder.stop() from silence timer");
                     
                     // Stop recording
@@ -204,11 +204,11 @@ export default function Assistant() {
                     
                     // Fallback: If onstop doesn't fire, manually send the message
                     setTimeout(() => {
-                        if (realTimeTranscriptGlobal && realTimeTranscriptGlobal.trim()) {
+                        if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
                             console.log("📤 Fallback: Sending message to backend");
                             const message = {
                                 type: "final_transcript",
-                                data: realTimeTranscriptGlobal.trim()
+                                data: realTimeTranscriptRef.current.trim()
                             };
                             if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
                                 try {
@@ -216,11 +216,11 @@ export default function Assistant() {
                                     console.log("📤 Fallback message sent successfully");
                                 } catch (error) {
                                     console.error("❌ Error sending fallback message:", error);
-                                    sendMockResponse(realTimeTranscriptGlobal.trim());
+                                    sendMockResponse(realTimeTranscriptRef.current.trim());
                                 }
                             } else {
                                 console.log("❌ WebSocket not connected for fallback, using mock response");
-                                sendMockResponse(realTimeTranscriptGlobal.trim());
+                                sendMockResponse(realTimeTranscriptRef.current.trim());
                             }
                         }
                     }, 1000); // Wait 1 second for onstop to fire, then use fallback
@@ -303,7 +303,7 @@ export default function Assistant() {
                 if (finalTranscript || interimTranscript) {
                     const currentTranscript = finalTranscript + interimTranscript;
                     updateRealTimeTranscript(currentTranscript);
-                    realTimeTranscriptGlobal = currentTranscript;
+                    realTimeTranscriptRef.current = currentTranscript;
                     console.log("📝 Current transcript:", currentTranscript);
                     
                     // Only reset silence timer if there's meaningful speech (not just audio noise)
@@ -312,7 +312,7 @@ export default function Assistant() {
                         const words = currentTranscript.trim().split(/\s+/);
                         if (words.length > 0 && words[words.length - 1].length > 1) {
                             console.log("🎤 Meaningful speech detected, resetting silence timer");
-                            lastTranscriptChangeTime = Date.now();
+                            lastTranscriptChangeRef.current = Date.now();
                             resetSilenceTimer();
                         }
                     }
@@ -338,7 +338,7 @@ export default function Assistant() {
                 
                 // Check if we should stop recording due to silence
                 if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-                    const timeSinceLastChange = Date.now() - lastTranscriptChangeTime;
+                    const timeSinceLastChange = Date.now() - lastTranscriptChangeRef.current;
                     console.log("⏰ Time since last transcript change:", timeSinceLastChange, "ms");
                     
                     if (timeSinceLastChange >= 2000) { // If 2+ seconds since last meaningful speech
@@ -416,8 +416,8 @@ export default function Assistant() {
             // Start real-time speech recognition
             if (recognitionRef.current) {
                 recognitionRef.current.start();
-                realTimeTranscriptGlobal = "";
-                lastTranscriptChangeTime = Date.now();
+                realTimeTranscriptRef.current = "";
+                lastTranscriptChangeRef.current = Date.now();
             }
             
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -443,11 +443,11 @@ export default function Assistant() {
                 // Wait a moment for any final recognition results
                 setTimeout(() => {
                     // Send final transcript if available, otherwise send audio
-                    if (realTimeTranscriptGlobal && realTimeTranscriptGlobal.trim()) {
-                        console.log("📤 Sending final transcript:", realTimeTranscriptGlobal);
+                    if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
+                        console.log("📤 Sending final transcript:", realTimeTranscriptRef.current);
                         const message = {
                             type: "final_transcript",
-                            data: realTimeTranscriptGlobal.trim()
+                            data: realTimeTranscriptRef.current.trim()
                         };
                         console.log("📤 Sending message:", message);
                         if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
@@ -461,20 +461,20 @@ export default function Assistant() {
                                 setTimeout(() => {
                                     if (status === "processing") {
                                         console.log("⏰ No response received from server after 3s, using mock response");
-                                        sendMockResponse(realTimeTranscriptGlobal.trim());
+                                        sendMockResponse(realTimeTranscriptRef.current.trim());
                                     }
                                 }, 3000); // Wait 3 seconds for server response
                             } catch (error) {
                                 console.error("❌ Error sending WebSocket message:", error);
                                 console.log("🔄 Attempting to reconnect WebSocket...");
                                 initializeWebSocket();
-                                sendMockResponse(realTimeTranscriptGlobal.trim());
+                                sendMockResponse(realTimeTranscriptRef.current.trim());
                             }
                         } else {
                             console.log("❌ WebSocket not connected (state:", socketRef.current?.readyState, "), using mock response");
                             console.log("🔄 Attempting to reconnect WebSocket...");
                             initializeWebSocket();
-                            sendMockResponse(realTimeTranscriptGlobal.trim());
+                            sendMockResponse(realTimeTranscriptRef.current.trim());
                         }
                     } else {
                         console.log("📤 No transcript available, sending audio for processing");
