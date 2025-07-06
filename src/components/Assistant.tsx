@@ -25,6 +25,7 @@ export default function Assistant() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [realTimeTranscript, setRealTimeTranscript] = useState('');
     const [backendUrl, setBackendUrl] = useState<string>('');
+    const messageCounterRef = useRef<number>(0);
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -188,16 +189,53 @@ export default function Assistant() {
     const getWebSocketUrl = () => {
         const baseUrl = getBackendUrl();
         // Convert HTTP URL to WebSocket URL
-        const wsUrl = baseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-        return `${wsUrl}/conversational-ai/ws/voice`;
+        let wsUrl = baseUrl;
+        
+        // Handle different URL formats
+        if (baseUrl.startsWith('http://')) {
+            wsUrl = baseUrl.replace('http://', 'ws://');
+        } else if (baseUrl.startsWith('https://')) {
+            wsUrl = baseUrl.replace('https://', 'wss://');
+        } else if (!baseUrl.startsWith('ws://') && !baseUrl.startsWith('wss://')) {
+            // If no protocol specified, assume http
+            wsUrl = `ws://${baseUrl}`;
+        }
+        
+        const fullWsUrl = `${wsUrl}/conversational-ai/ws/voice`;
+        console.log("🔌 Constructed WebSocket URL:", fullWsUrl);
+        return fullWsUrl;
     };
 
     const checkBackendStatus = async () => {
         try {
             const baseUrl = getBackendUrl();
-            const response = await fetch(`${baseUrl}/conversational-ai/`);
+            console.log("🔍 Checking backend status at:", `${baseUrl}/conversational-ai/`);
+            
+            const response = await fetch(`${baseUrl}/conversational-ai/`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                signal: AbortSignal.timeout(5000), // 5 second timeout
+            });
+            
+            if (!response.ok) {
+                console.error("❌ Backend status check failed:", response.status, response.statusText);
+                return null;
+            }
+            
             const data = await response.json();
             console.log("🔍 Backend status:", data);
+            
+            // Check ElevenLabs status specifically
+            if (data.status) {
+                console.log("🔍 ElevenLabs status:", data.status.elevenlabs_available);
+                console.log("🔍 ElevenLabs key:", data.status.elevenlabs_key);
+                if (data.status.elevenlabs_available !== "✅ Available") {
+                    console.warn("⚠️ ElevenLabs not available - audio won't work");
+                }
+            }
+            
             return data.status;
         } catch (error) {
             console.error("❌ Failed to check backend status:", error);
@@ -210,20 +248,43 @@ export default function Assistant() {
             socketRef.current.close();
         }
         
-        const wsUrl = getWebSocketUrl();
-        console.log("🔌 Connecting to WebSocket:", wsUrl);
-        socketRef.current = new WebSocket(wsUrl);
+        try {
+            const wsUrl = getWebSocketUrl();
+            console.log("🔌 Connecting to WebSocket:", wsUrl);
+            socketRef.current = new WebSocket(wsUrl);
+        } catch (error) {
+            console.error("❌ Failed to create WebSocket connection:", error);
+            updateStatus("Error: Failed to connect to backend", "error");
+            return;
+        }
+        
+        // Add connection timeout
+        const connectionTimeout = setTimeout(() => {
+            if (socketRef.current && socketRef.current.readyState === WebSocket.CONNECTING) {
+                console.error("❌ WebSocket connection timeout");
+                updateStatus("Error: Backend connection timeout", "error");
+                socketRef.current.close();
+            }
+        }, 10000); // 10 second timeout
         
         socketRef.current.onopen = () => {
+            clearTimeout(connectionTimeout);
             console.log("✅ WebSocket connected successfully");
             updateStatus("Ready to start conversation", "ready");
         };
         
         socketRef.current.onmessage = (event) => {
-            console.log("📨 WebSocket message received:", event.data);
+            messageCounterRef.current += 1;
+            console.log(`📨 WebSocket message #${messageCounterRef.current} received:`, event.data);
+            console.log("📨 Raw message length:", event.data.length);
+            console.log("📨 Message starts with:", event.data.substring(0, 50) + "...");
+            
             try {
                 const data = JSON.parse(event.data);
                 console.log("📨 Parsed WebSocket data:", data);
+                console.log("📨 Message type:", data.type);
+                console.log("📨 Available keys:", Object.keys(data));
+                console.log("📨 Message timestamp:", new Date().toISOString());
                 
                 if (data.type === "transcription") {
                     console.log("📝 Adding transcription message:", data.text);
@@ -233,13 +294,32 @@ export default function Assistant() {
                     updateRealTimeTranscript(data.text);
                 } else if (data.type === "response") {
                     console.log("🤖 Adding AI response:", data.text);
+                    console.log("🤖 Response data keys:", Object.keys(data));
                     addMessage("AI: " + data.text, "assistant");
                     updateStatus("Ready to start conversation", "ready");
                     lastAssistantTextRef.current = data.text || "";
                     addAssistantText(data.text || "");
+                    
+                    // Check if audio should be coming separately
+                    console.log("🤖 Waiting for audio response...");
+                    
+                    // Set a timeout to detect if audio is missing
+                    setTimeout(() => {
+                        if (!ttsPlayingRef.current) {
+                            console.log("⚠️ No audio received after text response - backend may not be generating audio");
+                        }
+                    }, 2000);
                 } else if (data.type === "audio") {
                     console.log("🎵 Playing audio response");
-                    playAudio(data.audio);
+                    console.log("🎵 Audio data length:", data.audio?.length || "undefined");
+                    console.log("🎵 Audio data preview:", data.audio?.substring(0, 50) + "...");
+                    if (data.audio && data.audio.length > 100) {
+                        console.log("✅ Audio data looks valid, playing...");
+                        playAudio(data.audio);
+                    } else {
+                        console.error("❌ Audio data is missing, empty, or too short");
+                        console.error("❌ Audio data:", data.audio);
+                    }
                 } else if (data.type === "error") {
                     console.error("❌ WebSocket error:", data.message);
                     updateStatus("Error: " + data.message, "error");
@@ -751,7 +831,21 @@ export default function Assistant() {
     useEffect(() => {
         setupAudioDetection();
         initializeSpeechRecognition();
-        initializeWebSocket();
+        
+        // Test backend connection on component mount
+        const testBackendConnection = async () => {
+            console.log("🔍 Testing backend connection...");
+            const status = await checkBackendStatus();
+            if (status) {
+                console.log("✅ Backend is accessible");
+                initializeWebSocket();
+            } else {
+                console.log("⚠️ Backend not accessible, will try WebSocket anyway");
+                initializeWebSocket();
+            }
+        };
+        
+        testBackendConnection();
         
         return () => {
             console.log("🧹 Cleaning up WebSocket and timers...");
