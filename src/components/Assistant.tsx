@@ -112,6 +112,13 @@ export default function Assistant() {
     const playAudio = (audioBase64: string) => {
         console.log("🎵 Received audio data, length:", audioBase64.length);
         
+        // Stop mic to avoid capturing TTS
+        if (isRecordingRef.current) {
+            console.log("🔇 Temporarily stopping mic during TTS playback");
+            handleStopRecording();
+        }
+        ttsPlayingRef.current = true;
+
         const audioData = atob(audioBase64);
         const audioArray = new Uint8Array(audioData.length);
         for (let i = 0; i < audioData.length; i++) {
