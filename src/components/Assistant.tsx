@@ -175,23 +175,32 @@ export default function Assistant() {
         
         // Set timer for 3 seconds
         silenceTimerRef.current = setTimeout(() => {
-            if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                 // Check if transcript has been stable for 3 seconds
                 const timeSinceLastChange = Date.now() - lastTranscriptChangeTime;
+                console.log("⏰ Silence timer fired - time since last change:", timeSinceLastChange, "ms");
+                
                 if (timeSinceLastChange >= 3000) {
                     console.log("🔇 3 seconds of silence detected (no transcript changes), stopping recording");
                     console.log("📝 Final transcript before stopping:", realTimeTranscriptGlobal);
+                    console.log("🛑 Calling mediaRecorder.stop() from silence timer");
                     
-                    // Manually trigger the onstop event
-                    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-                        mediaRecorderRef.current.stop();
-                    }
+                    // Stop recording
+                    mediaRecorderRef.current.stop();
                     setIsRecording(false);
                     
+                    // Stop speech recognition
+                    if (recognitionRef.current) {
+                        recognitionRef.current.stop();
+                    }
+                    
                     // Stop all tracks to release microphone
-                    if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
+                    if (mediaRecorderRef.current.stream) {
                         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
                     }
+                    
+                    // Clear the timer
+                    silenceTimerRef.current = null;
                     
                     // Fallback: If onstop doesn't fire, manually send the message
                     setTimeout(() => {
@@ -220,6 +229,8 @@ export default function Assistant() {
                     // Restart the timer
                     startSilenceDetection();
                 }
+            } else {
+                console.log("⏰ Silence timer fired but not recording anymore");
             }
         }, 3000);
         
@@ -229,8 +240,9 @@ export default function Assistant() {
     const resetSilenceTimer = () => {
         if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
         }
-        if (isRecording) {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
             startSilenceDetection();
         }
     };
@@ -295,7 +307,7 @@ export default function Assistant() {
                     console.log("📝 Current transcript:", currentTranscript);
                     
                     // Only reset silence timer if there's meaningful speech (not just audio noise)
-                    if (isRecording && currentTranscript.trim().length > 0) {
+                    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording" && currentTranscript.trim().length > 0) {
                         // Check if the transcript has actually changed meaningfully
                         const words = currentTranscript.trim().split(/\s+/);
                         if (words.length > 0 && words[words.length - 1].length > 1) {
@@ -310,7 +322,7 @@ export default function Assistant() {
             recognitionRef.current.onerror = (event: any) => {
                 console.error("Speech recognition error:", event.error);
                 // Restart recognition if it fails
-                if (isRecording && recognitionRef.current) {
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording" && recognitionRef.current) {
                     setTimeout(() => {
                         try {
                             recognitionRef.current.start();
@@ -325,37 +337,45 @@ export default function Assistant() {
                 console.log("🎤 Real-time speech recognition ended");
                 
                 // Check if we should stop recording due to silence
-                if (isRecording) {
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                     const timeSinceLastChange = Date.now() - lastTranscriptChangeTime;
+                    console.log("⏰ Time since last transcript change:", timeSinceLastChange, "ms");
+                    
                     if (timeSinceLastChange >= 2000) { // If 2+ seconds since last meaningful speech
                         console.log("🔇 Speech recognition ended after silence, stopping recording");
-                        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-                            mediaRecorderRef.current.stop();
-                            setIsRecording(false);
-                            
-                            // Stop all tracks to release microphone
-                            if (mediaRecorderRef.current.stream) {
-                                mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-                            }
-                            
-                            // Clear silence timer
-                            if (silenceTimerRef.current) {
-                                clearTimeout(silenceTimerRef.current);
-                            }
+                        console.log("🛑 Calling mediaRecorder.stop() from onend handler");
+                        
+                        // Stop recording
+                        mediaRecorderRef.current.stop();
+                        setIsRecording(false);
+                        
+                        // Stop all tracks to release microphone
+                        if (mediaRecorderRef.current.stream) {
+                            mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
                         }
+                        
+                        // Clear silence timer
+                        if (silenceTimerRef.current) {
+                            clearTimeout(silenceTimerRef.current);
+                            silenceTimerRef.current = null;
+                        }
+                        
                         return; // Don't restart recognition
                     }
                     
                     // Otherwise, restart recognition if still recording
+                    console.log("🔄 Restarting speech recognition (not enough silence time)");
                     setTimeout(() => {
                         try {
-                            if (isRecording && recognitionRef.current) {
+                            if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording" && recognitionRef.current) {
                                 recognitionRef.current.start();
                             }
                         } catch (e) {
                             console.error("Failed to restart recognition:", e);
                         }
                     }, 100);
+                } else {
+                    console.log("🎤 Speech recognition ended but not recording anymore");
                 }
             };
         } else {
