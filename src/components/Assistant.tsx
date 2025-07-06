@@ -448,22 +448,25 @@ export default function Assistant() {
                 });
             }
             
-            // Start real-time speech recognition
-            if (recognitionRef.current) {
-                recognitionRef.current.start();
-                realTimeTranscriptRef.current = "";
-                lastTranscriptChangeRef.current = Date.now();
-                requestSentRef.current = false;
-            }
-            
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
+
             mediaRecorderRef.current = new MediaRecorder(stream);
             audioChunksRef.current = [];
             
             mediaRecorderRef.current.ondataavailable = (event) => {
                 audioChunksRef.current.push(event.data);
             };
+
+            // Important: start recording FIRST to ensure we have audio before recognition begins
+            mediaRecorderRef.current.start();
+
+            // Now start real-time speech recognition
+            if (recognitionRef.current) {
+                recognitionRef.current.start();
+                realTimeTranscriptRef.current = "";
+                lastTranscriptChangeRef.current = Date.now();
+                requestSentRef.current = false;
+            }
             
             mediaRecorderRef.current.onstop = () => {
                 console.log("🎤 Recording stopped, processing results...");
@@ -587,11 +590,6 @@ export default function Assistant() {
                     }, 500);
                 }
             };
-            
-            mediaRecorderRef.current.start();
-            updateStatus("Recording... Speak now! (will auto-stop after 3s silence)", "recording");
-            updateRecordingState(true);
-            recordingStartingRef.current = false;
             
             // Start silence detection
             startSilenceDetection();
