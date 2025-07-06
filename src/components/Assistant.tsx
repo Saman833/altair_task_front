@@ -56,30 +56,64 @@ export default function Assistant() {
 
     const playAudio = (audioBase64: string) => {
         console.log("🎵 Received audio data, length:", audioBase64.length);
+        console.log("🎵 Audio data preview:", audioBase64.substring(0, 50) + "...");
         
-        const audioData = atob(audioBase64);
-        const audioArray = new Uint8Array(audioData.length);
-        for (let i = 0; i < audioData.length; i++) {
-            audioArray[i] = audioData.charCodeAt(i);
+        try {
+            const audioData = atob(audioBase64);
+            const audioArray = new Uint8Array(audioData.length);
+            for (let i = 0; i < audioData.length; i++) {
+                audioArray[i] = audioData.charCodeAt(i);
+            }
+            
+            console.log("🔊 Audio array created, size:", audioArray.length);
+            
+            // Try different audio formats
+            const audioFormats = [
+                { type: 'audio/mpeg', name: 'MPEG' },
+                { type: 'audio/wav', name: 'WAV' },
+                { type: 'audio/mp3', name: 'MP3' },
+                { type: 'audio/mp4', name: 'MP4' }
+            ];
+            
+            let audioPlayed = false;
+            
+            for (const format of audioFormats) {
+                if (audioPlayed) break;
+                
+                try {
+                    const audioBlob = new Blob([audioArray], { type: format.type });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    
+                    audio.onloadstart = () => console.log(`🎵 Audio loading started (${format.name})`);
+                    audio.oncanplay = () => console.log(`🎵 Audio can play (${format.name})`);
+                    audio.onplay = () => {
+                        console.log(`🎵 Audio playing started (${format.name})`);
+                        audioPlayed = true;
+                    };
+                    audio.onerror = (e) => console.error(`❌ Audio error (${format.name}):`, e);
+                    audio.onended = () => console.log(`🎵 Audio finished playing (${format.name})`);
+                    
+                    audio.play().then(() => {
+                        console.log(`✅ Audio playback started successfully (${format.name})`);
+                    }).catch(error => {
+                        console.error(`❌ Audio playback failed (${format.name}):`, error);
+                    });
+                    
+                    // If we get here without error, assume it worked
+                    audioPlayed = true;
+                } catch (error) {
+                    console.error(`❌ Failed to create audio with ${format.name}:`, error);
+                }
+            }
+            
+            if (!audioPlayed) {
+                console.error("❌ Failed to play audio with any format");
+            }
+            
+        } catch (error) {
+            console.error("❌ Error processing audio data:", error);
         }
-        
-        console.log("🔊 Audio array created, size:", audioArray.length);
-        
-        const audioBlob = new Blob([audioArray], { type: 'audio/mpeg' });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-        
-        audio.onloadstart = () => console.log("🎵 Audio loading started");
-        audio.oncanplay = () => console.log("🎵 Audio can play");
-        audio.onplay = () => console.log("🎵 Audio playing started");
-        audio.onerror = (e) => console.error("❌ Audio error:", e);
-        audio.onended = () => console.log("🎵 Audio finished playing");
-        
-        audio.play().then(() => {
-            console.log("✅ Audio playback started successfully");
-        }).catch(error => {
-            console.error("❌ Audio playback failed:", error);
-        });
     };
 
     const initializeWebSocket = () => {
@@ -93,19 +127,38 @@ export default function Assistant() {
         
         socketRef.current.onmessage = (event) => {
             console.log("📨 WebSocket message received:", event.data);
-            const data = JSON.parse(event.data);
+            console.log("📨 Message type:", typeof event.data);
             
-            if (data.type === "transcription") {
-                addMessage("You: " + data.text, "user");
-            } else if (data.type === "realtime_transcription") {
-                updateRealTimeTranscript(data.text);
-            } else if (data.type === "response") {
-                addMessage("AI: " + data.text, "assistant");
-            } else if (data.type === "audio") {
-                console.log("🎵 Received audio response, length:", data.audio?.length);
-                playAudio(data.audio);
-            } else if (data.type === "error") {
-                updateStatus("Error: " + data.message, "error");
+            try {
+                const data = JSON.parse(event.data);
+                console.log("📨 Parsed data:", data);
+                console.log("📨 Data type:", data.type);
+                console.log("📨 Data keys:", Object.keys(data));
+                
+                if (data.type === "transcription") {
+                    console.log("📝 Processing transcription:", data.text);
+                    addMessage("You: " + data.text, "user");
+                } else if (data.type === "realtime_transcription") {
+                    console.log("📝 Processing realtime transcription:", data.text);
+                    updateRealTimeTranscript(data.text);
+                } else if (data.type === "response") {
+                    console.log("🤖 Processing AI response:", data.text);
+                    addMessage("AI: " + data.text, "assistant");
+                } else if (data.type === "audio") {
+                    console.log("🎵 Processing audio response");
+                    console.log("🎵 Audio data length:", data.audio?.length);
+                    console.log("🎵 Audio data type:", typeof data.audio);
+                    console.log("🎵 Audio data preview:", data.audio?.substring(0, 50) + "...");
+                    playAudio(data.audio);
+                } else if (data.type === "error") {
+                    console.log("❌ Processing error:", data.message);
+                    updateStatus("Error: " + data.message, "error");
+                } else {
+                    console.log("❓ Unknown message type:", data.type);
+                }
+            } catch (error) {
+                console.error("❌ Error parsing WebSocket message:", error);
+                console.error("❌ Raw message:", event.data);
             }
         };
         
