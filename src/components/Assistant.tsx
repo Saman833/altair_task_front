@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 
+// Type declaration for Vite environment variables
+declare global {
+    interface ImportMeta {
+        readonly env: {
+            readonly VITE_BACKEND_URL?: string;
+        };
+    }
+}
+
 interface Message {
     text: string;
     sender: 'user' | 'assistant';
@@ -15,6 +24,7 @@ export default function Assistant() {
     const [status, setStatus] = useState('ready');
     const [messages, setMessages] = useState<Message[]>([]);
     const [realTimeTranscript, setRealTimeTranscript] = useState('');
+    const [backendUrl, setBackendUrl] = useState<string>('');
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -158,12 +168,50 @@ export default function Assistant() {
         });
     };
 
+    const getBackendUrl = () => {
+        // Try Vite backend URL first, fallback to localhost
+        const viteBackendUrl = import.meta.env.VITE_BACKEND_URL;
+        const localhostUrl = "http://localhost:8006";
+        
+        if (viteBackendUrl) {
+            console.log("🔗 Using Vite backend URL:", viteBackendUrl);
+            setBackendUrl(viteBackendUrl);
+            return viteBackendUrl;
+        } else {
+            console.log("🔗 Using localhost fallback URL:", localhostUrl);
+            setBackendUrl(localhostUrl);
+            return localhostUrl;
+        }
+    };
+
+    const getWebSocketUrl = () => {
+        const baseUrl = getBackendUrl();
+        // Convert HTTP URL to WebSocket URL
+        const wsUrl = baseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+        return `${wsUrl}/conversational-ai/ws/voice`;
+    };
+
+    const checkBackendStatus = async () => {
+        try {
+            const baseUrl = getBackendUrl();
+            const response = await fetch(`${baseUrl}/conversational-ai/`);
+            const data = await response.json();
+            console.log("🔍 Backend status:", data);
+            return data.status;
+        } catch (error) {
+            console.error("❌ Failed to check backend status:", error);
+            return null;
+        }
+    };
+
     const initializeWebSocket = () => {
         if (socketRef.current) {
             socketRef.current.close();
         }
         
-        socketRef.current = new WebSocket("ws://localhost:8006/ws/voice");
+        const wsUrl = getWebSocketUrl();
+        console.log("🔌 Connecting to WebSocket:", wsUrl);
+        socketRef.current = new WebSocket(wsUrl);
         
         socketRef.current.onopen = () => {
             console.log("✅ WebSocket connected successfully");
@@ -214,8 +262,11 @@ export default function Assistant() {
             } else if (event.code === 1006) {
                 console.log("⚠️ WebSocket closed abnormally (1006)");
             } else if (event.code === 4000) {
-                console.log("⚠️ WebSocket closed by server - API keys not configured");
-                updateStatus("Error: Backend API keys not configured", "error");
+                console.log("⚠️ WebSocket closed by server - OpenAI API key not configured");
+                updateStatus("Error: OpenAI API key not configured", "error");
+            } else if (event.code === 4001) {
+                console.log("⚠️ WebSocket closed by server - ElevenLabs not available");
+                updateStatus("Error: ElevenLabs service not available", "error");
             }
         };
     };
@@ -764,6 +815,12 @@ export default function Assistant() {
                         {status === 'processing' && 'Processing...'}
                         {status === 'error' && 'Error occurred'}
                     </div>
+                    
+                    {backendUrl && (
+                        <div className="text-center mb-4 text-sm text-gray-600">
+                            🔗 Backend: {backendUrl}
+                        </div>
+                    )}
                     
                     {realTimeTranscript && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
