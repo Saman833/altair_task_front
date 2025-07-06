@@ -54,9 +54,9 @@ export default function Assistant() {
 
     const looksLikeEcho = (userTxt: string) => {
         const userWords = normalizeText(userTxt).split(' ').filter(Boolean);
-        if (userWords.length < 3) return false; // allow very short phrases
+        if (userWords.length < 4) return false; // less than 4 words passes through
         const shared = userWords.filter(w => assistantWordSetRef.current.has(w)).length;
-        return shared / userWords.length >= 0.7; // 70% or more overlap => echo
+        return shared / userWords.length >= 0.85; // 85% or more overlap considered echo
     };
 
     const updateStatus = (message: string, className: string) => {
@@ -345,20 +345,40 @@ export default function Assistant() {
             recognitionRef.current.onresult = (event: any) => {
                 let interimTranscript = '';
                 let finalTranscript = '';
+                let confidenceSum = 0;
+                let confidenceCount = 0;
                 
                 // Accumulate all results
                 for (let i = 0; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
-                    if (event.results[i].isFinal) {
+                    const res = event.results[i];
+                    const transcript = res[0].transcript;
+                    const conf = res[0].confidence ?? 0.9; // if confidence missing assume high
+                    confidenceSum += conf;
+                    confidenceCount += 1;
+                    if (res.isFinal) {
                         finalTranscript += transcript + ' ';
                     } else {
                         interimTranscript += transcript;
                     }
                 }
+                const avgConfidence = confidenceCount ? confidenceSum / confidenceCount : 1;
                 
                 // Update real-time transcript with accumulated text
                 if (finalTranscript || interimTranscript) {
                     const currentTranscript = finalTranscript + interimTranscript;
+
+                    // Filter out noise: require >=3 words OR avg conf >=0.6
+                    const wordsArr = normalizeText(currentTranscript).split(' ').filter(Boolean);
+                    if (containsEmoji(currentTranscript) || alphabeticRatio(currentTranscript) < 0.6) {
+                        console.log("🛑 Dropping transcript due to emoji or low alphabetic ratio");
+                        return;
+                    }
+
+                    if (wordsArr.length < 3 && avgConfidence < 0.6) {
+                        // Ignore very short, low confidence snippets
+                        return;
+                    }
+
                     updateRealTimeTranscript(currentTranscript);
                     realTimeTranscriptRef.current = currentTranscript;
                     console.log("📝 Current transcript:", currentTranscript);
@@ -367,7 +387,7 @@ export default function Assistant() {
                     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording" && currentTranscript.trim().length > 0) {
                         // Check if the transcript has actually changed meaningfully
                         const words = currentTranscript.trim().split(/\s+/);
-                        if (words.length > 0 && words[words.length - 1].length > 1) {
+                        if (words.length > 0 && words[words.length - 1].length > 2) {
                             console.log("🎤 Meaningful speech detected, resetting silence timer");
                             lastTranscriptChangeRef.current = Date.now();
                             resetSilenceTimer();
@@ -548,7 +568,21 @@ export default function Assistant() {
                     // Send final transcript if available, otherwise send audio
                     if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
                         // Robust echo filter using word-overlap heuristic
-                        if (looksLikeEcho(realTimeTranscriptRef.current)) {
+                        const currentTxt = realTimeTranscriptRef.current;
+                        if (containsEmoji(currentTxt) || alphabeticRatio(currentTxt) < 0.6) {
+                            console.log("🛑 Dropping final transcript due to emoji or low alphabetic ratio");
+                            updateStatus("Waiting for speech...", "waiting");
+                            if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                                setTimeout(() => {
+                                    if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                                        handleStartRecording();
+                                    }
+                                }, 800);
+                            }
+                            return;
+                        }
+
+                        if (looksLikeEcho(currentTxt)) {
                             console.log("🛑 Echo detected – transcript dropped");
                             updateStatus("Waiting for speech...", "waiting");
                             if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
@@ -565,10 +599,10 @@ export default function Assistant() {
                             console.log("🚫 Duplicate send prevented (transcript path)");
                             return;
                         }
-                        console.log("📤 Sending final transcript:", realTimeTranscriptRef.current);
+                        console.log("📤 Sending final transcript:", currentTxt);
                         const message = {
                             type: "final_transcript",
-                            data: realTimeTranscriptRef.current.trim()
+                            data: currentTxt.trim()
                         };
                         requestSentRef.current = true;
                         console.log("📤 Sending message:", message);
@@ -583,20 +617,20 @@ export default function Assistant() {
                                 setTimeout(() => {
                                     if (status === "processing") {
                                         console.log("⏰ No response received from server after 3s, using mock response");
-                                        sendMockResponse(realTimeTranscriptRef.current.trim());
+                                        sendMockResponse(currentTxt.trim());
                                     }
                                 }, 3000); // Wait 3 seconds for server response
                             } catch (error) {
                                 console.error("❌ Error sending WebSocket message:", error);
                                 console.log("🔄 Attempting to reconnect WebSocket...");
                                 initializeWebSocket();
-                                sendMockResponse(realTimeTranscriptRef.current.trim());
+                                sendMockResponse(currentTxt.trim());
                             }
                         } else {
                             console.log("❌ WebSocket not connected (state:", socketRef.current?.readyState, "), using mock response");
                             console.log("🔄 Attempting to reconnect WebSocket...");
                             initializeWebSocket();
-                            sendMockResponse(realTimeTranscriptRef.current.trim());
+                            sendMockResponse(currentTxt.trim());
                         }
                     } else {
                         console.log("📤 No transcript available, sending audio for processing");
@@ -740,6 +774,13 @@ export default function Assistant() {
             conversationActiveRef.current = false;
         };
     }, []);
+
+    const containsEmoji = (txt: string) => /[\u{1F300}-\u{1FAFF}]/u.test(txt);
+
+    const alphabeticRatio = (txt: string) => {
+        const letters = txt.replace(/[^a-z]/gi, '');
+        return letters.length / Math.max(1, txt.length);
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
