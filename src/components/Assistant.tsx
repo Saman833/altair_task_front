@@ -113,11 +113,15 @@ export default function Assistant() {
         };
     };
 
+
+
     const startSilenceDetection = () => {
+        // Clear any existing timer
         if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
         }
         
+        // Set timer for 3 seconds
         silenceTimerRef.current = setTimeout(() => {
             if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                 console.log("🔇 3 seconds of silence detected, stopping recording");
@@ -128,44 +132,6 @@ export default function Assistant() {
                 if (mediaRecorderRef.current.stream) {
                     mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
                 }
-                
-                // Stop speech recognition
-                if (recognitionRef.current) {
-                    recognitionRef.current.stop();
-                }
-                
-                // Remove real-time transcript
-                setRealTimeTranscript('');
-                
-                // Wait a moment for any final recognition results
-                setTimeout(() => {
-                    // Send final transcript if available, otherwise send audio
-                    if (realTimeTranscript && realTimeTranscript.trim()) {
-                        console.log("📤 Sending final transcript:", realTimeTranscript);
-                        if (socketRef.current) {
-                            socketRef.current.send(JSON.stringify({
-                                type: "final_transcript",
-                                data: realTimeTranscript.trim()
-                            }));
-                        }
-                    } else {
-                        console.log("📤 No transcript available, sending audio for processing");
-                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const base64Audio = (reader.result as string).split(',')[1];
-                            if (socketRef.current) {
-                                socketRef.current.send(JSON.stringify({
-                                    type: "final_audio",
-                                    data: base64Audio
-                                }));
-                            }
-                        };
-                        reader.readAsDataURL(audioBlob);
-                    }
-                    
-                    updateStatus("Processing...", "processing");
-                }, 500); // Wait 500ms for final recognition results
             }
         }, 3000);
     };
@@ -176,53 +142,6 @@ export default function Assistant() {
         }
         if (isRecording) {
             startSilenceDetection();
-        }
-    };
-
-    const setupAudioDetection = () => {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    audioContextRef.current = new AudioContext();
-                    analyserRef.current = audioContextRef.current.createAnalyser();
-                    microphoneRef.current = audioContextRef.current.createMediaStreamSource(stream);
-                    scriptProcessorRef.current = audioContextRef.current.createScriptProcessor(2048, 1, 1);
-                    
-                    if (analyserRef.current) {
-                        analyserRef.current.smoothingTimeConstant = 0.8;
-                        analyserRef.current.fftSize = 1024;
-                    }
-                    
-                    if (microphoneRef.current && analyserRef.current) {
-                        microphoneRef.current.connect(analyserRef.current);
-                    }
-                    if (analyserRef.current && scriptProcessorRef.current) {
-                        analyserRef.current.connect(scriptProcessorRef.current);
-                    }
-                    if (scriptProcessorRef.current && audioContextRef.current) {
-                        scriptProcessorRef.current.connect(audioContextRef.current.destination);
-                    }
-                    
-                    if (scriptProcessorRef.current) {
-                        scriptProcessorRef.current.onaudioprocess = function() {
-                            if (!isRecording) return;
-                            
-                            if (analyserRef.current) {
-                                const array = new Uint8Array(analyserRef.current.frequencyBinCount);
-                                analyserRef.current.getByteFrequencyData(array);
-                                const arraySum = array.reduce((a, value) => a + value);
-                                const average = arraySum / array.length;
-                                
-                                // If there's significant audio activity, reset the silence timer
-                                if (average > 30) {
-                                    console.log("🎤 Speech detected, resetting silence timer");
-                                    resetSilenceTimer();
-                                }
-                            }
-                        };
-                    }
-                })
-                .catch(err => console.log("Audio activity detection not available:", err));
         }
     };
 
@@ -299,6 +218,7 @@ export default function Assistant() {
                 });
             }
             
+            // Start real-time speech recognition
             if (recognitionRef.current) {
                 recognitionRef.current.start();
             }
@@ -313,53 +233,91 @@ export default function Assistant() {
             };
             
             mediaRecorderRef.current.onstop = () => {
-                // Only process if this is a manual stop (not silence detection)
-                if (isRecording) {
-                    if (recognitionRef.current) {
-                        recognitionRef.current.stop();
-                    }
-                    
-                    setRealTimeTranscript('');
-                    
-                    setTimeout(() => {
-                        if (realTimeTranscript && realTimeTranscript.trim()) {
-                            console.log("📤 Sending final transcript:", realTimeTranscript);
+                // Stop speech recognition
+                if (recognitionRef.current) {
+                    recognitionRef.current.stop();
+                }
+                
+                // Remove real-time transcript
+                setRealTimeTranscript('');
+                
+                // Wait a moment for any final recognition results
+                setTimeout(() => {
+                    // Send final transcript if available, otherwise send audio
+                    if (realTimeTranscript && realTimeTranscript.trim()) {
+                        console.log("📤 Sending final transcript:", realTimeTranscript);
+                        if (socketRef.current) {
+                            socketRef.current.send(JSON.stringify({
+                                type: "final_transcript",
+                                data: realTimeTranscript.trim()
+                            }));
+                        }
+                    } else {
+                        console.log("📤 No transcript available, sending audio for processing");
+                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const base64Audio = (reader.result as string).split(',')[1];
                             if (socketRef.current) {
                                 socketRef.current.send(JSON.stringify({
-                                    type: "final_transcript",
-                                    data: realTimeTranscript.trim()
+                                    type: "final_audio",
+                                    data: base64Audio
                                 }));
                             }
-                        } else {
-                            console.log("📤 No transcript available, sending audio for processing");
-                            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                                const base64Audio = (reader.result as string).split(',')[1];
-                                if (socketRef.current) {
-                                    socketRef.current.send(JSON.stringify({
-                                        type: "final_audio",
-                                        data: base64Audio
-                                    }));
-                                }
-                            };
-                            reader.readAsDataURL(audioBlob);
-                        }
-                        
-                        updateStatus("Processing...", "processing");
-                    }, 500);
-                }
+                        };
+                        reader.readAsDataURL(audioBlob);
+                    }
+                    
+                    updateStatus("Processing...", "processing");
+                }, 500); // Wait 500ms for final recognition results
             };
+            
+            // Set up audio detection with the same stream
+            audioContextRef.current = new AudioContext();
+            analyserRef.current = audioContextRef.current.createAnalyser();
+            microphoneRef.current = audioContextRef.current.createMediaStreamSource(stream);
+            scriptProcessorRef.current = audioContextRef.current.createScriptProcessor(2048, 1, 1);
+            
+            if (analyserRef.current) {
+                analyserRef.current.smoothingTimeConstant = 0.8;
+                analyserRef.current.fftSize = 1024;
+            }
+            
+            if (microphoneRef.current && analyserRef.current) {
+                microphoneRef.current.connect(analyserRef.current);
+            }
+            if (analyserRef.current && scriptProcessorRef.current) {
+                analyserRef.current.connect(scriptProcessorRef.current);
+            }
+            if (scriptProcessorRef.current && audioContextRef.current) {
+                scriptProcessorRef.current.connect(audioContextRef.current.destination);
+            }
+            
+            if (scriptProcessorRef.current) {
+                scriptProcessorRef.current.onaudioprocess = function() {
+                    if (!isRecording) return;
+                    
+                    if (analyserRef.current) {
+                        const array = new Uint8Array(analyserRef.current.frequencyBinCount);
+                        analyserRef.current.getByteFrequencyData(array);
+                        const arraySum = array.reduce((a, value) => a + value);
+                        const average = arraySum / array.length;
+                        
+                        // If there's significant audio activity, reset the silence timer
+                        if (average > 30) {
+                            console.log("🎤 Speech detected, resetting silence timer");
+                            resetSilenceTimer();
+                        }
+                    }
+                };
+            }
             
             mediaRecorderRef.current.start();
             updateStatus("Recording... Speak now! (will auto-stop after 3s silence)", "recording");
             setIsRecording(true);
             
+            // Start silence detection
             startSilenceDetection();
-            
-            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-                audioContextRef.current.resume();
-            }
             
         } catch (error) {
             updateStatus("Error: " + (error as Error).message, "error");
@@ -383,7 +341,6 @@ export default function Assistant() {
     };
 
     useEffect(() => {
-        setupAudioDetection();
         initializeSpeechRecognition();
         initializeWebSocket();
         
