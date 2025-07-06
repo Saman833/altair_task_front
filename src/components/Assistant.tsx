@@ -353,9 +353,13 @@ export default function Assistant() {
                 recognitionRunningRef.current = false;
                 // If a restart was queued, start it now
                 if (startQueuedRef.current && conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                    console.log("🔄 [onend] Starting queued recording");
+                    console.log("🔄 [onend] Queued recording will start after 1 s delay");
                     startQueuedRef.current = false;
-                    handleStartRecording();
+                    setTimeout(() => {
+                        if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                            handleStartRecording();
+                        }
+                    }, 1000);
                     return;
                 }
                 
@@ -450,7 +454,15 @@ export default function Assistant() {
             
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-            mediaRecorderRef.current = new MediaRecorder(stream);
+            let mimeType = "audio/webm;codecs=opus";
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = "audio/webm";
+            }
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = "audio/ogg;codecs=opus";
+            }
+            mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
+            console.log("🎙️ MediaRecorder created with mimeType:", mimeType);
             audioChunksRef.current = [];
             
             mediaRecorderRef.current.ondataavailable = (event) => {
@@ -591,11 +603,11 @@ export default function Assistant() {
                     // Safety fallback: if recognition isn't running, start after short delay
                     setTimeout(() => {
                         if (startQueuedRef.current && !recognitionRunningRef.current && conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                            console.log("⚠️ Recognition not running, starting queued recording via fallback");
+                            console.log("⚠️ Recognition not running, starting queued recording via fallback after delay");
                             startQueuedRef.current = false;
                             handleStartRecording();
                         }
-                    }, 500);
+                    }, 1000);
                 }
             };
             
