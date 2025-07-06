@@ -10,6 +10,7 @@ interface Message {
 
 export default function Assistant() {
     const [isRecording, setIsRecording] = useState(false);
+    const isRecordingRef = useRef<boolean>(false);
     const [status, setStatus] = useState('ready');
     const [messages, setMessages] = useState<Message[]>([]);
     const [realTimeTranscript, setRealTimeTranscript] = useState('');
@@ -139,10 +140,10 @@ export default function Assistant() {
                     console.log("🤖 Adding AI response:", data.text);
                     addMessage("AI: " + data.text, "assistant");
                     updateStatus("Ready to start conversation", "ready");
-                    if (conversationActiveRef.current && !isRecording) {
+                    if (conversationActiveRef.current && !isRecordingRef.current) {
                         console.log("🔄 Auto-restarting recording after text response");
                         setTimeout(() => {
-                            if (conversationActiveRef.current && !isRecording) {
+                            if (conversationActiveRef.current && !isRecordingRef.current) {
                                 handleStartRecording();
                             }
                         }, 300);
@@ -199,7 +200,7 @@ export default function Assistant() {
                     
                     // Stop recording
                     mediaRecorderRef.current.stop();
-                    setIsRecording(false);
+                    updateRecordingState(false);
                     
                     // Stop speech recognition
                     if (recognitionRef.current) {
@@ -364,7 +365,7 @@ export default function Assistant() {
                         
                         // Stop recording
                         mediaRecorderRef.current.stop();
-                        setIsRecording(false);
+                        updateRecordingState(false);
                         
                         // Stop all tracks to release microphone
                         if (mediaRecorderRef.current.stream) {
@@ -400,7 +401,18 @@ export default function Assistant() {
         }
     };
 
+    const updateRecordingState = (val: boolean) => {
+        isRecordingRef.current = val;
+        setIsRecording(val);
+    };
+
     const handleStartRecording = async () => {
+        if (isRecordingRef.current) {
+            console.log("⏩ Already recording – start request ignored");
+            return;
+        }
+        // Mark conversation as active (for the *first* user click)
+        conversationActiveRef.current = true;
         try {
             // Ensure WebSocket is connected
             if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
@@ -548,30 +560,30 @@ export default function Assistant() {
                     updateStatus("Processing...", "processing");
                 }, 500); // Wait 500ms for final recognition results
 
-                // Immediately start next recording if conversation is active
+                // Schedule next recording immediately (doesn't rely on UI state)
                 if (conversationActiveRef.current) {
-                    console.log("🔄 Auto-starting next recording immediately after send");
                     setTimeout(() => {
-                        if (conversationActiveRef.current && !isRecording) {
+                        if (conversationActiveRef.current && !isRecordingRef.current) {
+                            console.log("🔄 [onstop] Auto-starting next recording");
                             handleStartRecording();
                         }
-                    }, 300);
+                    }, 100); // minimal delay
                 }
             };
             
             mediaRecorderRef.current.start();
             updateStatus("Recording... Speak now! (will auto-stop after 3s silence)", "recording");
-            setIsRecording(true);
+            updateRecordingState(true);
             
             // Start silence detection
             startSilenceDetection();
             
             // Add a backup timer (10 seconds max recording time)
             setTimeout(() => {
-                if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                if (isRecordingRef.current && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                     console.log("⏰ Backup timer: Maximum recording time reached, stopping recording");
                     mediaRecorderRef.current.stop();
-                    setIsRecording(false);
+                    updateRecordingState(false);
                     
                     if (mediaRecorderRef.current.stream) {
                         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
@@ -593,7 +605,7 @@ export default function Assistant() {
     const handleStopRecording = () => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
             mediaRecorderRef.current.stop();
-            setIsRecording(false);
+            updateRecordingState(false);
             
             if (silenceTimerRef.current) {
                 clearTimeout(silenceTimerRef.current);
