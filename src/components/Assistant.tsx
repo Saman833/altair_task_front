@@ -34,6 +34,7 @@ export default function Assistant() {
     const lastTranscriptChangeRef = useRef<number>(0);
     const requestSentRef = useRef<boolean>(false);
     const conversationActiveRef = useRef<boolean>(false);
+    const lastAssistantTextRef = useRef<string>("");
 
     const updateStatus = (message: string, className: string) => {
         setStatus(className);
@@ -143,7 +144,7 @@ export default function Assistant() {
                     console.log("🤖 Adding AI response:", data.text);
                     addMessage("AI: " + data.text, "assistant");
                     updateStatus("Ready to start conversation", "ready");
-                    // No auto-restart here; handled via queued mechanism in onstop/onend
+                    lastAssistantTextRef.current = data.text || "";
                 } else if (data.type === "audio") {
                     console.log("🎵 Playing audio response");
                     playAudio(data.audio);
@@ -263,7 +264,13 @@ export default function Assistant() {
 
     const setupAudioDetection = () => {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ audio: true })
+            navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            })
                 .then(stream => {
                     audioContextRef.current = new AudioContext();
                     analyserRef.current = audioContextRef.current.createAnalyser();
@@ -452,7 +459,13 @@ export default function Assistant() {
                 });
             }
             
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
 
             let mimeType = "audio/webm;codecs=opus";
             if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -499,6 +512,22 @@ export default function Assistant() {
                 setTimeout(() => {
                     // Send final transcript if available, otherwise send audio
                     if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
+                        // Echo-filter: drop transcript that starts with assistant's last reply
+                        const cleanUser = normalizeText(realTimeTranscriptRef.current);
+                        const cleanBot  = normalizeText(lastAssistantTextRef.current);
+                        if (cleanBot && cleanUser.startsWith(cleanBot)) {
+                            console.log("🛑 Ignoring echo of assistant speech");
+                            updateStatus("Waiting for speech...", "waiting");
+                            if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                                setTimeout(() => {
+                                    if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                                        handleStartRecording();
+                                    }
+                                }, 800);
+                            }
+                            return;
+                        }
+
                         if (requestSentRef.current) {
                             console.log("🚫 Duplicate send prevented (transcript path)");
                             return;
@@ -678,6 +707,9 @@ export default function Assistant() {
             conversationActiveRef.current = false;
         };
     }, []);
+
+    // Helper to normalise text for echo comparison
+    const normalizeText = (txt: string) => txt.toLowerCase().replace(/[^a-z0-9 ]+/g, '').trim();
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
