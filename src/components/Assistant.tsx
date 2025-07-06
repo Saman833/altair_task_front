@@ -124,7 +124,10 @@ export default function Assistant() {
         // Set timer for 3 seconds
         silenceTimerRef.current = setTimeout(() => {
             console.log("🔇 Silence timer expired, checking if still recording...");
-            if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+            console.log("🔇 isRecording state:", isRecording);
+            console.log("🔇 MediaRecorder state:", mediaRecorderRef.current?.state);
+            
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                 console.log("🔇 3 seconds of silence detected, stopping recording");
                 
                 // Stop speech recognition first
@@ -174,7 +177,7 @@ export default function Assistant() {
                     updateStatus("Processing...", "processing");
                 }, 500); // Wait 500ms for final recognition results
             } else {
-                console.log("🔇 Silence timer expired but not recording or MediaRecorder not in recording state");
+                console.log("🔇 Silence timer expired but MediaRecorder not in recording state");
             }
         }, 3000);
     };
@@ -218,6 +221,10 @@ export default function Assistant() {
                     const currentTranscript = finalTranscript + interimTranscript;
                     updateRealTimeTranscript(currentTranscript);
                     console.log("📝 Current transcript:", currentTranscript);
+                    
+                    // Fallback: Reset silence timer when speech is detected
+                    console.log("🔄 Speech recognition detected activity, resetting silence timer");
+                    resetSilenceTimer();
                 }
             };
             
@@ -321,6 +328,7 @@ export default function Assistant() {
             };
             
             // Set up audio detection with the same stream
+            console.log("🎤 Setting up audio detection...");
             audioContextRef.current = new AudioContext();
             analyserRef.current = audioContextRef.current.createAnalyser();
             microphoneRef.current = audioContextRef.current.createMediaStreamSource(stream);
@@ -329,16 +337,20 @@ export default function Assistant() {
             if (analyserRef.current) {
                 analyserRef.current.smoothingTimeConstant = 0.8;
                 analyserRef.current.fftSize = 1024;
+                console.log("🎤 Audio analyser configured");
             }
             
             if (microphoneRef.current && analyserRef.current) {
                 microphoneRef.current.connect(analyserRef.current);
+                console.log("🎤 Microphone connected to analyser");
             }
             if (analyserRef.current && scriptProcessorRef.current) {
                 analyserRef.current.connect(scriptProcessorRef.current);
+                console.log("🎤 Analyser connected to script processor");
             }
             if (scriptProcessorRef.current && audioContextRef.current) {
                 scriptProcessorRef.current.connect(audioContextRef.current.destination);
+                console.log("🎤 Script processor connected to audio context");
             }
             
             if (scriptProcessorRef.current) {
@@ -351,8 +363,10 @@ export default function Assistant() {
                         const arraySum = array.reduce((a, value) => a + value);
                         const average = arraySum / array.length;
                         
-                        // Debug: Log audio levels
-                        console.log("🎤 Audio level:", average);
+                        // Debug: Log audio levels (only every 10th call to avoid spam)
+                        if (Math.random() < 0.1) {
+                            console.log("🎤 Audio level:", average);
+                        }
                         
                         // If there's significant audio activity, reset the silence timer
                         if (average > 15) { // Lowered threshold from 30 to 15
@@ -361,6 +375,7 @@ export default function Assistant() {
                         }
                     }
                 };
+                console.log("🎤 Audio processing function set up");
             }
             
             mediaRecorderRef.current.start();
