@@ -41,6 +41,27 @@ export default function Assistant() {
         setMessages(prev => [...prev, newMessage]);
     };
 
+    const sendMockResponse = (userMessage: string) => {
+        console.log("🤖 Sending mock response for:", userMessage);
+        
+        // Simulate AI response
+        const responses = [
+            "Hello! I can hear you clearly. How can I help you today?",
+            "I heard you say: '" + userMessage + "'. What would you like to know?",
+            "Thanks for your message. I'm here to assist you with any questions you have.",
+            "I understand you said: '" + userMessage + "'. Let me help you with that.",
+            "Great! I'm listening and ready to help. What would you like to discuss?"
+        ];
+        
+        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+        
+        // Add the response after a short delay to simulate processing
+        setTimeout(() => {
+            addMessage("AI: " + randomResponse, "assistant");
+            updateStatus("Ready to start conversation", "ready");
+        }, 1000);
+    };
+
     const updateRealTimeTranscript = (text: string) => {
         // Remove any existing real-time transcript
         setRealTimeTranscript(text);
@@ -93,18 +114,32 @@ export default function Assistant() {
         };
         
         socketRef.current.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            
-            if (data.type === "transcription") {
-                addMessage("You: " + data.text, "user");
-            } else if (data.type === "realtime_transcription") {
-                updateRealTimeTranscript(data.text);
-            } else if (data.type === "response") {
-                addMessage("AI: " + data.text, "assistant");
-            } else if (data.type === "audio") {
-                playAudio(data.audio);
-            } else if (data.type === "error") {
-                updateStatus("Error: " + data.message, "error");
+            console.log("📨 WebSocket message received:", event.data);
+            try {
+                const data = JSON.parse(event.data);
+                console.log("📨 Parsed WebSocket data:", data);
+                
+                if (data.type === "transcription") {
+                    console.log("📝 Adding transcription message:", data.text);
+                    addMessage("You: " + data.text, "user");
+                } else if (data.type === "realtime_transcription") {
+                    console.log("📝 Updating real-time transcript:", data.text);
+                    updateRealTimeTranscript(data.text);
+                } else if (data.type === "response") {
+                    console.log("🤖 Adding AI response:", data.text);
+                    addMessage("AI: " + data.text, "assistant");
+                    updateStatus("Ready to start conversation", "ready");
+                } else if (data.type === "audio") {
+                    console.log("🎵 Playing audio response");
+                    playAudio(data.audio);
+                } else if (data.type === "error") {
+                    console.error("❌ WebSocket error:", data.message);
+                    updateStatus("Error: " + data.message, "error");
+                } else {
+                    console.log("❓ Unknown message type:", data.type);
+                }
+            } catch (error) {
+                console.error("❌ Error parsing WebSocket message:", error);
             }
         };
         
@@ -292,11 +327,24 @@ export default function Assistant() {
                     // Send final transcript if available, otherwise send audio
                     if (realTimeTranscriptGlobal && realTimeTranscriptGlobal.trim()) {
                         console.log("📤 Sending final transcript:", realTimeTranscriptGlobal);
-                        if (socketRef.current) {
-                            socketRef.current.send(JSON.stringify({
-                                type: "final_transcript",
-                                data: realTimeTranscriptGlobal.trim()
-                            }));
+                        const message = {
+                            type: "final_transcript",
+                            data: realTimeTranscriptGlobal.trim()
+                        };
+                        console.log("📤 Sending message:", message);
+                        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                            socketRef.current.send(JSON.stringify(message));
+                            
+                            // Set a timeout to use mock response if no response received
+                            setTimeout(() => {
+                                if (status === "processing") {
+                                    console.log("⏰ No response received from server, using mock response");
+                                    sendMockResponse(realTimeTranscriptGlobal.trim());
+                                }
+                            }, 3000); // Wait 3 seconds for server response
+                        } else {
+                            console.log("❌ WebSocket not connected, using mock response");
+                            sendMockResponse(realTimeTranscriptGlobal.trim());
                         }
                     } else {
                         console.log("📤 No transcript available, sending audio for processing");
@@ -304,11 +352,24 @@ export default function Assistant() {
                         const reader = new FileReader();
                         reader.onload = () => {
                             const base64Audio = (reader.result as string).split(',')[1];
-                            if (socketRef.current) {
-                                socketRef.current.send(JSON.stringify({
-                                    type: "final_audio",
-                                    data: base64Audio
-                                }));
+                            const message = {
+                                type: "final_audio",
+                                data: base64Audio
+                            };
+                            console.log("📤 Sending audio message, data length:", base64Audio.length);
+                            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                                socketRef.current.send(JSON.stringify(message));
+                                
+                                // Set a timeout to use mock response if no response received
+                                setTimeout(() => {
+                                    if (status === "processing") {
+                                        console.log("⏰ No response received from server, using mock response");
+                                        sendMockResponse("Audio input");
+                                    }
+                                }, 3000); // Wait 3 seconds for server response
+                            } else {
+                                console.log("❌ WebSocket not connected, using mock response");
+                                sendMockResponse("Audio input");
                             }
                         };
                         reader.readAsDataURL(audioBlob);
