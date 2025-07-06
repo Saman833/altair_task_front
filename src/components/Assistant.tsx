@@ -83,13 +83,16 @@ export default function Assistant() {
     };
 
     const initializeWebSocket = () => {
+        console.log("🔌 Initializing WebSocket connection to ws://localhost:8006/ws/voice");
         socketRef.current = new WebSocket("ws://localhost:8006/ws/voice");
         
         socketRef.current.onopen = () => {
-            console.log("WebSocket connected");
+            console.log("✅ WebSocket connected successfully");
+            updateStatus("Ready to start conversation", "ready");
         };
         
         socketRef.current.onmessage = (event) => {
+            console.log("📨 WebSocket message received:", event.data);
             const data = JSON.parse(event.data);
             
             if (data.type === "transcription") {
@@ -99,6 +102,7 @@ export default function Assistant() {
             } else if (data.type === "response") {
                 addMessage("AI: " + data.text, "assistant");
             } else if (data.type === "audio") {
+                console.log("🎵 Received audio response, length:", data.audio?.length);
                 playAudio(data.audio);
             } else if (data.type === "error") {
                 updateStatus("Error: " + data.message, "error");
@@ -106,12 +110,13 @@ export default function Assistant() {
         };
         
         socketRef.current.onerror = (error) => {
-            console.error("WebSocket error:", error);
-            updateStatus("Connection error", "error");
+            console.error("❌ WebSocket error:", error);
+            updateStatus("WebSocket connection failed - AI responses unavailable", "error");
         };
         
-        socketRef.current.onclose = () => {
-            console.log("WebSocket disconnected");
+        socketRef.current.onclose = (event) => {
+            console.log("🔌 WebSocket disconnected:", event.code, event.reason);
+            updateStatus("WebSocket disconnected - AI responses unavailable", "error");
         };
     };
 
@@ -151,6 +156,20 @@ export default function Assistant() {
                 
                 // Wait a moment for any final recognition results, then process
                 setTimeout(() => {
+                    // Check if WebSocket is connected
+                    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+                        console.error("❌ WebSocket not connected, cannot send data");
+                        updateStatus("WebSocket not connected - AI responses unavailable", "error");
+                        
+                        // Add a mock response for testing
+                        setTimeout(() => {
+                            addMessage("AI: I received your message: '" + (realTimeTranscript || "audio recording") + "'. The WebSocket server is not running, so this is a mock response.", "assistant");
+                            updateStatus("Ready to start conversation", "ready");
+                        }, 1000);
+                        
+                        return;
+                    }
+                    
                     // Send final transcript if available, otherwise send audio
                     if (realTimeTranscript && realTimeTranscript.trim()) {
                         console.log("📤 Sending final transcript:", realTimeTranscript);
@@ -307,6 +326,13 @@ export default function Assistant() {
                     
                     // Wait a moment for any final recognition results
                     setTimeout(() => {
+                        // Check if WebSocket is connected
+                        if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+                            console.error("❌ WebSocket not connected, cannot send data");
+                            updateStatus("WebSocket not connected - AI responses unavailable", "error");
+                            return;
+                        }
+                        
                         // Send final transcript if available, otherwise send audio
                         if (realTimeTranscript && realTimeTranscript.trim()) {
                             console.log("📤 Sending final transcript:", realTimeTranscript);
