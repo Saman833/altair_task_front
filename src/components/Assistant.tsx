@@ -512,11 +512,18 @@ export default function Assistant() {
                 setTimeout(() => {
                     // Send final transcript if available, otherwise send audio
                     if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
-                        // Echo-filter: drop transcript that starts with assistant's last reply
+                        // Echo-filter: drop transcript that matches or is contained in assistant reply (≥3 words)
                         const cleanUser = normalizeText(realTimeTranscriptRef.current);
                         const cleanBot  = normalizeText(lastAssistantTextRef.current);
-                        if (cleanBot && cleanUser.startsWith(cleanBot)) {
-                            console.log("🛑 Ignoring echo of assistant speech");
+                        const userWordCount = cleanUser.split(' ').filter(Boolean).length;
+                        if (
+                            cleanBot && userWordCount >= 3 &&
+                            (cleanUser.startsWith(cleanBot) ||
+                             cleanBot.startsWith(cleanUser) ||
+                             cleanBot.includes(cleanUser) ||
+                             cleanUser.includes(cleanBot))
+                        ) {
+                            console.log("🛑 Ignoring echo of assistant speech (overlap filter)");
                             updateStatus("Waiting for speech...", "waiting");
                             if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
                                 setTimeout(() => {
