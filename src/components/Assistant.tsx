@@ -458,7 +458,8 @@ export default function Assistant() {
             };
 
             // Important: start recording FIRST to ensure we have audio before recognition begins
-            mediaRecorderRef.current.start();
+            // Provide a 1-second timeslice so ondataavailable fires regularly, even in silence.
+            mediaRecorderRef.current.start(1000);
 
             // Now start real-time speech recognition
             if (recognitionRef.current) {
@@ -530,8 +531,16 @@ export default function Assistant() {
                             return;
                         }
                         if (audioChunksRef.current.length === 0) {
-                            console.log("⚠️ No audio chunks recorded; skipping send");
-                        } else {
+                            console.log("⚠️ No audio chunks recorded; user probably stayed silent.");
+                            // Do NOT queue another restart immediately; wait 1s then restart to avoid tight loops
+                            updateStatus("Waiting for speech...", "waiting");
+                            setTimeout(() => {
+                                if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                                    handleStartRecording();
+                                }
+                            }, 1000);
+                            return;
+                        }
                         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
                         const reader = new FileReader();
                         reader.onload = () => {
@@ -570,7 +579,6 @@ export default function Assistant() {
                             }
                         };
                         reader.readAsDataURL(audioBlob);
-                        }
                     }
                     
                     updateStatus("Processing...", "processing");
