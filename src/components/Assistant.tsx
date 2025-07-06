@@ -28,6 +28,7 @@ export default function Assistant() {
     // Using refs so their values persist across renders and are reliably updated inside callbacks
     const realTimeTranscriptRef = useRef<string>("");
     const lastTranscriptChangeRef = useRef<number>(0);
+    const requestSentRef = useRef<boolean>(false);
 
     const updateStatus = (message: string, className: string) => {
         setStatus(className);
@@ -204,12 +205,17 @@ export default function Assistant() {
                     
                     // Fallback: If onstop doesn't fire, manually send the message
                     setTimeout(() => {
+                        if (requestSentRef.current) {
+                            console.log("🚫 Duplicate send prevented (fallback path)");
+                            return;
+                        }
                         if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
                             console.log("📤 Fallback: Sending message to backend");
                             const message = {
                                 type: "final_transcript",
                                 data: realTimeTranscriptRef.current.trim()
                             };
+                            requestSentRef.current = true;
                             if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
                                 try {
                                     socketRef.current.send(JSON.stringify(message));
@@ -418,6 +424,7 @@ export default function Assistant() {
                 recognitionRef.current.start();
                 realTimeTranscriptRef.current = "";
                 lastTranscriptChangeRef.current = Date.now();
+                requestSentRef.current = false;
             }
             
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -444,11 +451,16 @@ export default function Assistant() {
                 setTimeout(() => {
                     // Send final transcript if available, otherwise send audio
                     if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
+                        if (requestSentRef.current) {
+                            console.log("🚫 Duplicate send prevented (transcript path)");
+                            return;
+                        }
                         console.log("📤 Sending final transcript:", realTimeTranscriptRef.current);
                         const message = {
                             type: "final_transcript",
                             data: realTimeTranscriptRef.current.trim()
                         };
+                        requestSentRef.current = true;
                         console.log("📤 Sending message:", message);
                         if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
                             try {
@@ -478,6 +490,10 @@ export default function Assistant() {
                         }
                     } else {
                         console.log("📤 No transcript available, sending audio for processing");
+                        if (requestSentRef.current) {
+                            console.log("🚫 Duplicate send prevented (audio path)");
+                            return;
+                        }
                         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
                         const reader = new FileReader();
                         reader.onload = () => {
@@ -486,6 +502,7 @@ export default function Assistant() {
                                 type: "final_audio",
                                 data: base64Audio
                             };
+                            requestSentRef.current = true;
                             console.log("📤 Sending audio message, data length:", base64Audio.length);
                             if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
                                 try {
