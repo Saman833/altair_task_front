@@ -180,23 +180,50 @@ export default function Assistant() {
                 const timeSinceLastChange = Date.now() - lastTranscriptChangeTime;
                 if (timeSinceLastChange >= 3000) {
                     console.log("🔇 3 seconds of silence detected (no transcript changes), stopping recording");
-                    mediaRecorderRef.current.stop();
+                    console.log("📝 Final transcript before stopping:", realTimeTranscriptGlobal);
+                    
+                    // Manually trigger the onstop event
+                    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                        mediaRecorderRef.current.stop();
+                    }
                     setIsRecording(false);
                     
                     // Stop all tracks to release microphone
-                    if (mediaRecorderRef.current.stream) {
+                    if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
                         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
                     }
+                    
+                    // Fallback: If onstop doesn't fire, manually send the message
+                    setTimeout(() => {
+                        if (realTimeTranscriptGlobal && realTimeTranscriptGlobal.trim()) {
+                            console.log("📤 Fallback: Sending message to backend");
+                            const message = {
+                                type: "final_transcript",
+                                data: realTimeTranscriptGlobal.trim()
+                            };
+                            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                                try {
+                                    socketRef.current.send(JSON.stringify(message));
+                                    console.log("📤 Fallback message sent successfully");
+                                } catch (error) {
+                                    console.error("❌ Error sending fallback message:", error);
+                                    sendMockResponse(realTimeTranscriptGlobal.trim());
+                                }
+                            } else {
+                                console.log("❌ WebSocket not connected for fallback, using mock response");
+                                sendMockResponse(realTimeTranscriptGlobal.trim());
+                            }
+                        }
+                    }, 1000); // Wait 1 second for onstop to fire, then use fallback
                 } else {
                     console.log("⏰ Transcript changed recently, continuing recording...");
                     // Restart the timer
                     startSilenceDetection();
                 }
-            }
-        }, 3000);
-        
-        console.log("⏰ Silence detection timer started (3 seconds)");
-    };
+            }, 3000);
+            
+            console.log("⏰ Silence detection timer started (3 seconds)");
+        };
 
     const resetSilenceTimer = () => {
         if (silenceTimerRef.current) {
