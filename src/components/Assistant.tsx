@@ -119,8 +119,11 @@ export default function Assistant() {
             clearTimeout(silenceTimerRef.current);
         }
         
+        console.log("🔇 Starting silence detection timer (3 seconds)");
+        
         // Set timer for 3 seconds
         silenceTimerRef.current = setTimeout(() => {
+            console.log("🔇 Silence timer expired, checking if still recording...");
             if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
                 console.log("🔇 3 seconds of silence detected, stopping recording");
                 
@@ -170,11 +173,14 @@ export default function Assistant() {
                     
                     updateStatus("Processing...", "processing");
                 }, 500); // Wait 500ms for final recognition results
+            } else {
+                console.log("🔇 Silence timer expired but not recording or MediaRecorder not in recording state");
             }
         }, 3000);
     };
 
     const resetSilenceTimer = () => {
+        console.log("🔄 Resetting silence timer");
         if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
         }
@@ -345,8 +351,11 @@ export default function Assistant() {
                         const arraySum = array.reduce((a, value) => a + value);
                         const average = arraySum / array.length;
                         
+                        // Debug: Log audio levels
+                        console.log("🎤 Audio level:", average);
+                        
                         // If there's significant audio activity, reset the silence timer
-                        if (average > 30) {
+                        if (average > 15) { // Lowered threshold from 30 to 15
                             console.log("🎤 Speech detected, resetting silence timer");
                             resetSilenceTimer();
                         }
@@ -355,10 +364,12 @@ export default function Assistant() {
             }
             
             mediaRecorderRef.current.start();
+            console.log("🎤 MediaRecorder started");
             updateStatus("Recording... Speak now! (will auto-stop after 3s silence)", "recording");
             setIsRecording(true);
             
             // Start silence detection
+            console.log("🔇 Starting silence detection");
             startSilenceDetection();
             
         } catch (error) {
