@@ -11,6 +11,7 @@ interface Message {
 export default function Assistant() {
     const [isRecording, setIsRecording] = useState(false);
     const isRecordingRef = useRef<boolean>(false);
+    const recordingStartingRef = useRef<boolean>(false);
     const [status, setStatus] = useState('ready');
     const [messages, setMessages] = useState<Message[]>([]);
     const [realTimeTranscript, setRealTimeTranscript] = useState('');
@@ -407,10 +408,11 @@ export default function Assistant() {
     };
 
     const handleStartRecording = async () => {
-        if (isRecordingRef.current) {
-            console.log("⏩ Already recording – start request ignored");
+        if (isRecordingRef.current || recordingStartingRef.current) {
+            console.log("⏩ Recording already active or starting – start request ignored");
             return;
         }
+        recordingStartingRef.current = true;
         // Mark conversation as active (for the *first* user click)
         conversationActiveRef.current = true;
         try {
@@ -461,6 +463,9 @@ export default function Assistant() {
             
             mediaRecorderRef.current.onstop = () => {
                 console.log("🎤 Recording stopped, processing results...");
+                
+                // ensure starting flag reset in case stop happened before start completed
+                recordingStartingRef.current = false;
                 
                 // Stop speech recognition
                 if (recognitionRef.current) {
@@ -563,7 +568,7 @@ export default function Assistant() {
                 // Schedule next recording immediately (doesn't rely on UI state)
                 if (conversationActiveRef.current) {
                     setTimeout(() => {
-                        if (conversationActiveRef.current && !isRecordingRef.current) {
+                        if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
                             console.log("🔄 [onstop] Auto-starting next recording");
                             handleStartRecording();
                         }
@@ -574,6 +579,7 @@ export default function Assistant() {
             mediaRecorderRef.current.start();
             updateStatus("Recording... Speak now! (will auto-stop after 3s silence)", "recording");
             updateRecordingState(true);
+            recordingStartingRef.current = false;
             
             // Start silence detection
             startSilenceDetection();
@@ -661,7 +667,7 @@ export default function Assistant() {
                         </button>
                         <button
                             onClick={handleStopRecording}
-                            disabled={!isRecording && !conversationActiveRef.current}
+                            disabled={!isRecording && !conversationActiveRef.current && !recordingStartingRef.current}
                             className="px-8 py-4 mx-2 text-lg font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                         >
                             🛑 Stop Recording
