@@ -125,23 +125,6 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Main Layout with Sidebar */}
       <div className="flex h-screen">
-        {/* Left Sidebar with Search */}
-        <div className="w-80 bg-white shadow-lg border-r border-gray-200 flex flex-col">
-          {/* Sidebar Header */}
-          <div className="bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 p-4">
-            <h1 className="text-white text-lg font-semibold">Content Search</h1>
-            <p className="text-white/80 text-sm">Filter and search your content</p>
-          </div>
-          
-          {/* Search Bar in Sidebar */}
-          <div className="flex-1 overflow-y-auto">
-            <CollapsibleSearchBar 
-              onSearchResults={handleSearchResults}
-              onLoading={handleLoading}
-            />
-          </div>
-        </div>
-
         {/* Main Content Area */}
         <div className="flex-1 overflow-y-auto">
           {showSearchResults ? (
@@ -240,6 +223,23 @@ export default function Home() {
             // Dashboard View
             <Dashboard />
           )}
+        </div>
+
+        {/* Right Sidebar with Search */}
+        <div className="w-80 bg-white shadow-lg border-l border-gray-200 flex flex-col">
+          {/* Sidebar Header */}
+          <div className="bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 p-4">
+            <h1 className="text-white text-lg font-semibold">Content Search</h1>
+            <p className="text-white/80 text-sm">Filter and search your content</p>
+          </div>
+          
+          {/* Search Bar in Sidebar */}
+          <div className="flex-1 overflow-y-auto">
+            <CollapsibleSearchBar 
+              onSearchResults={handleSearchResults}
+              onLoading={handleLoading}
+            />
+          </div>
         </div>
       </div>
     </div>
