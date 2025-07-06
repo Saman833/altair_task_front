@@ -36,9 +36,28 @@ export default function Assistant() {
     const conversationActiveRef = useRef<boolean>(false);
     const lastAssistantTextRef = useRef<string>("");
     const ttsPlayingRef = useRef<boolean>(false);
+    // Set of words from recent assistant replies for echo detection
+    const assistantWordSetRef = useRef<Set<string>>(new Set());
 
     // Helper to normalise text for simple echo comparison
     const normalizeText = (txt: string) => txt.toLowerCase().replace(/[^a-z0-9 ]+/g, '').trim();
+
+    const addAssistantText = (text: string) => {
+        const words = normalizeText(text).split(' ').filter(Boolean);
+        const set = assistantWordSetRef.current;
+        words.forEach(w => set.add(w));
+        // Keep only last ~300 words to bound memory
+        if (set.size > 300) {
+            assistantWordSetRef.current = new Set(Array.from(set).slice(-300));
+        }
+    };
+
+    const looksLikeEcho = (userTxt: string) => {
+        const userWords = normalizeText(userTxt).split(' ').filter(Boolean);
+        if (userWords.length < 3) return false; // allow very short phrases
+        const shared = userWords.filter(w => assistantWordSetRef.current.has(w)).length;
+        return shared / userWords.length >= 0.7; // 70% or more overlap => echo
+    };
 
     const updateStatus = (message: string, className: string) => {
         setStatus(className);
@@ -160,6 +179,7 @@ export default function Assistant() {
                     addMessage("AI: " + data.text, "assistant");
                     updateStatus("Ready to start conversation", "ready");
                     lastAssistantTextRef.current = data.text || "";
+                    addAssistantText(data.text || "");
                 } else if (data.type === "audio") {
                     console.log("🎵 Playing audio response");
                     playAudio(data.audio);
@@ -527,18 +547,9 @@ export default function Assistant() {
                 setTimeout(() => {
                     // Send final transcript if available, otherwise send audio
                     if (realTimeTranscriptRef.current && realTimeTranscriptRef.current.trim()) {
-                        // Echo-filter: drop transcript that matches or is contained in assistant reply (≥3 words)
-                        const cleanUser = normalizeText(realTimeTranscriptRef.current);
-                        const cleanBot  = normalizeText(lastAssistantTextRef.current);
-                        const userWordCount = cleanUser.split(' ').filter(Boolean).length;
-                        if (
-                            cleanBot && userWordCount >= 3 &&
-                            (cleanUser.startsWith(cleanBot) ||
-                             cleanBot.startsWith(cleanUser) ||
-                             cleanBot.includes(cleanUser) ||
-                             cleanUser.includes(cleanBot))
-                        ) {
-                            console.log("🛑 Ignoring echo of assistant speech (overlap filter)");
+                        // Robust echo filter using word-overlap heuristic
+                        if (looksLikeEcho(realTimeTranscriptRef.current)) {
+                            console.log("🛑 Echo detected – transcript dropped");
                             updateStatus("Waiting for speech...", "waiting");
                             if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
                                 setTimeout(() => {
