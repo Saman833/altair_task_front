@@ -27,6 +27,7 @@ export default function Assistant() {
 
     let realTimeTranscriptGlobal = "";
     let isTranscribing = false;
+    let lastTranscriptChangeTime = 0;
 
     const updateStatus = (message: string, className: string) => {
         setStatus(className);
@@ -175,13 +176,21 @@ export default function Assistant() {
         // Set timer for 3 seconds
         silenceTimerRef.current = setTimeout(() => {
             if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-                console.log("🔇 3 seconds of silence detected, stopping recording");
-                mediaRecorderRef.current.stop();
-                setIsRecording(false);
-                
-                // Stop all tracks to release microphone
-                if (mediaRecorderRef.current.stream) {
-                    mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+                // Check if transcript has been stable for 3 seconds
+                const timeSinceLastChange = Date.now() - lastTranscriptChangeTime;
+                if (timeSinceLastChange >= 3000) {
+                    console.log("🔇 3 seconds of silence detected (no transcript changes), stopping recording");
+                    mediaRecorderRef.current.stop();
+                    setIsRecording(false);
+                    
+                    // Stop all tracks to release microphone
+                    if (mediaRecorderRef.current.stream) {
+                        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+                    }
+                } else {
+                    console.log("⏰ Transcript changed recently, continuing recording...");
+                    // Restart the timer
+                    startSilenceDetection();
                 }
             }
         }, 3000);
@@ -215,20 +224,9 @@ export default function Assistant() {
                     scriptProcessorRef.current.connect(audioContextRef.current.destination);
                     
                     scriptProcessorRef.current.onaudioprocess = function() {
-                        if (!isRecording) return;
-                        
-                        if (analyserRef.current) {
-                            const array = new Uint8Array(analyserRef.current.frequencyBinCount);
-                            analyserRef.current.getByteFrequencyData(array);
-                            const arraySum = array.reduce((a, value) => a + value);
-                            const average = arraySum / array.length;
-                            
-                            // If there's significant audio activity, reset the silence timer
-                            if (average > 20) { // Lowered threshold for better sensitivity
-                                console.log("🎤 Audio activity detected (level:", average, "), resetting silence timer");
-                                resetSilenceTimer();
-                            }
-                        }
+                        // Disabled audio analysis as it's too sensitive to background noise
+                        // Only using speech recognition for silence detection now
+                        return;
                     };
                 })
                 .catch(err => console.log("Audio activity detection not available:", err));
@@ -268,10 +266,15 @@ export default function Assistant() {
                     realTimeTranscriptGlobal = currentTranscript;
                     console.log("📝 Current transcript:", currentTranscript);
                     
-                    // Reset silence timer when speech is detected
-                    if (isRecording) {
-                        console.log("🎤 Speech detected, resetting silence timer");
-                        resetSilenceTimer();
+                    // Only reset silence timer if there's meaningful speech (not just audio noise)
+                    if (isRecording && currentTranscript.trim().length > 0) {
+                        // Check if the transcript has actually changed meaningfully
+                        const words = currentTranscript.trim().split(/\s+/);
+                        if (words.length > 0 && words[words.length - 1].length > 1) {
+                            console.log("🎤 Meaningful speech detected, resetting silence timer");
+                            lastTranscriptChangeTime = Date.now();
+                            resetSilenceTimer();
+                        }
                     }
                 }
             };
@@ -342,6 +345,7 @@ export default function Assistant() {
             if (recognitionRef.current) {
                 recognitionRef.current.start();
                 realTimeTranscriptGlobal = "";
+                lastTranscriptChangeTime = Date.now();
             }
             
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
