@@ -20,6 +20,8 @@ export default function Assistant() {
     const audioChunksRef = useRef<Blob[]>([]);
     const socketRef = useRef<WebSocket | null>(null);
     const recognitionRef = useRef<any>(null);
+    const recognitionRunningRef = useRef<boolean>(false);
+    const startQueuedRef = useRef<boolean>(false);
     const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
@@ -141,14 +143,7 @@ export default function Assistant() {
                     console.log("🤖 Adding AI response:", data.text);
                     addMessage("AI: " + data.text, "assistant");
                     updateStatus("Ready to start conversation", "ready");
-                    if (conversationActiveRef.current && !isRecordingRef.current) {
-                        console.log("🔄 Auto-restarting recording after text response");
-                        setTimeout(() => {
-                            if (conversationActiveRef.current && !isRecordingRef.current) {
-                                handleStartRecording();
-                            }
-                        }, 300);
-                    }
+                    // No auto-restart here; handled via queued mechanism in onstop/onend
                 } else if (data.type === "audio") {
                     console.log("🎵 Playing audio response");
                     playAudio(data.audio);
@@ -301,6 +296,7 @@ export default function Assistant() {
             recognitionRef.current.lang = 'en-US';
             
             recognitionRef.current.onstart = () => {
+                recognitionRunningRef.current = true;
                 console.log("🎤 Real-time speech recognition started");
             };
             
@@ -354,6 +350,14 @@ export default function Assistant() {
             
             recognitionRef.current.onend = () => {
                 console.log("🎤 Real-time speech recognition ended");
+                recognitionRunningRef.current = false;
+                // If a restart was queued, start it now
+                if (startQueuedRef.current && conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                    console.log("🔄 [onend] Starting queued recording");
+                    startQueuedRef.current = false;
+                    handleStartRecording();
+                    return;
+                }
                 
                 // Check if we should stop recording due to silence
                 if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -522,6 +526,9 @@ export default function Assistant() {
                             console.log("🚫 Duplicate send prevented (audio path)");
                             return;
                         }
+                        if (audioChunksRef.current.length === 0) {
+                            console.log("⚠️ No audio chunks recorded; skipping send");
+                        } else {
                         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
                         const reader = new FileReader();
                         reader.onload = () => {
@@ -560,19 +567,24 @@ export default function Assistant() {
                             }
                         };
                         reader.readAsDataURL(audioBlob);
+                        }
                     }
                     
                     updateStatus("Processing...", "processing");
                 }, 500); // Wait 500ms for final recognition results
 
-                // Schedule next recording immediately (doesn't rely on UI state)
+                // Queue next recording after recognition fully ends
                 if (conversationActiveRef.current) {
+                    console.log("⏳ Queuing next recording until recognition ends");
+                    startQueuedRef.current = true;
+                    // Safety fallback: if recognition isn't running, start after short delay
                     setTimeout(() => {
-                        if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
-                            console.log("🔄 [onstop] Auto-starting next recording");
+                        if (startQueuedRef.current && !recognitionRunningRef.current && conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                            console.log("⚠️ Recognition not running, starting queued recording via fallback");
+                            startQueuedRef.current = false;
                             handleStartRecording();
                         }
-                    }, 100); // minimal delay
+                    }, 500);
                 }
             };
             
