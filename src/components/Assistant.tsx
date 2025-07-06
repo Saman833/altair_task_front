@@ -107,10 +107,15 @@ export default function Assistant() {
     };
 
     const initializeWebSocket = () => {
+        if (socketRef.current) {
+            socketRef.current.close();
+        }
+        
         socketRef.current = new WebSocket("ws://localhost:8006/ws/voice");
         
         socketRef.current.onopen = () => {
-            console.log("WebSocket connected");
+            console.log("✅ WebSocket connected successfully");
+            updateStatus("Ready to start conversation", "ready");
         };
         
         socketRef.current.onmessage = (event) => {
@@ -136,7 +141,7 @@ export default function Assistant() {
                     console.error("❌ WebSocket error:", data.message);
                     updateStatus("Error: " + data.message, "error");
                 } else {
-                    console.log("❓ Unknown message type:", data.type);
+                    console.log("❓ Unknown message type:", data.type, "Full data:", data);
                 }
             } catch (error) {
                 console.error("❌ Error parsing WebSocket message:", error);
@@ -144,12 +149,20 @@ export default function Assistant() {
         };
         
         socketRef.current.onerror = (error) => {
-            console.error("WebSocket error:", error);
+            console.error("❌ WebSocket error:", error);
             updateStatus("Connection error", "error");
         };
         
-        socketRef.current.onclose = () => {
-            console.log("WebSocket disconnected");
+        socketRef.current.onclose = (event) => {
+            console.log("🔌 WebSocket disconnected, code:", event.code, "reason:", event.reason);
+            if (event.code === 1001) {
+                console.log("⚠️ WebSocket closed by client (1001)");
+            } else if (event.code === 1006) {
+                console.log("⚠️ WebSocket closed abnormally (1006)");
+            } else if (event.code === 4000) {
+                console.log("⚠️ WebSocket closed by server - API keys not configured");
+                updateStatus("Error: Backend API keys not configured", "error");
+            }
         };
     };
 
@@ -289,11 +302,30 @@ export default function Assistant() {
 
     const handleStartRecording = async () => {
         try {
+            // Ensure WebSocket is connected
             if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+                console.log("🔌 Initializing WebSocket connection...");
                 initializeWebSocket();
-                await new Promise(resolve => {
+                
+                // Wait for WebSocket to connect
+                await new Promise((resolve, reject) => {
                     if (socketRef.current) {
-                        socketRef.current.onopen = resolve;
+                        const timeout = setTimeout(() => {
+                            reject(new Error("WebSocket connection timeout"));
+                        }, 5000);
+                        
+                        socketRef.current.onopen = () => {
+                            clearTimeout(timeout);
+                            console.log("✅ WebSocket connected for recording");
+                            resolve(true);
+                        };
+                        
+                        socketRef.current.onerror = (error) => {
+                            clearTimeout(timeout);
+                            reject(error);
+                        };
+                    } else {
+                        reject(new Error("WebSocket not initialized"));
                     }
                 });
             }
@@ -333,17 +365,29 @@ export default function Assistant() {
                         };
                         console.log("📤 Sending message:", message);
                         if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                            socketRef.current.send(JSON.stringify(message));
-                            
-                            // Set a timeout to use mock response if no response received
-                            setTimeout(() => {
-                                if (status === "processing") {
-                                    console.log("⏰ No response received from server, using mock response");
-                                    sendMockResponse(realTimeTranscriptGlobal.trim());
-                                }
-                            }, 3000); // Wait 3 seconds for server response
+                            try {
+                                console.log("📤 Sending message to WebSocket:", message);
+                                console.log("📤 WebSocket state before sending:", socketRef.current.readyState);
+                                socketRef.current.send(JSON.stringify(message));
+                                console.log("📤 Message sent successfully");
+                                
+                                // Set a timeout to use mock response if no response received
+                                setTimeout(() => {
+                                    if (status === "processing") {
+                                        console.log("⏰ No response received from server after 3s, using mock response");
+                                        sendMockResponse(realTimeTranscriptGlobal.trim());
+                                    }
+                                }, 3000); // Wait 3 seconds for server response
+                            } catch (error) {
+                                console.error("❌ Error sending WebSocket message:", error);
+                                console.log("🔄 Attempting to reconnect WebSocket...");
+                                initializeWebSocket();
+                                sendMockResponse(realTimeTranscriptGlobal.trim());
+                            }
                         } else {
-                            console.log("❌ WebSocket not connected, using mock response");
+                            console.log("❌ WebSocket not connected (state:", socketRef.current?.readyState, "), using mock response");
+                            console.log("🔄 Attempting to reconnect WebSocket...");
+                            initializeWebSocket();
                             sendMockResponse(realTimeTranscriptGlobal.trim());
                         }
                     } else {
@@ -358,17 +402,29 @@ export default function Assistant() {
                             };
                             console.log("📤 Sending audio message, data length:", base64Audio.length);
                             if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                                socketRef.current.send(JSON.stringify(message));
-                                
-                                // Set a timeout to use mock response if no response received
-                                setTimeout(() => {
-                                    if (status === "processing") {
-                                        console.log("⏰ No response received from server, using mock response");
-                                        sendMockResponse("Audio input");
-                                    }
-                                }, 3000); // Wait 3 seconds for server response
+                                try {
+                                    console.log("📤 Sending audio message to WebSocket, data length:", base64Audio.length);
+                                    console.log("📤 WebSocket state before sending audio:", socketRef.current.readyState);
+                                    socketRef.current.send(JSON.stringify(message));
+                                    console.log("📤 Audio message sent successfully");
+                                    
+                                    // Set a timeout to use mock response if no response received
+                                    setTimeout(() => {
+                                        if (status === "processing") {
+                                            console.log("⏰ No response received from server after 3s, using mock response");
+                                            sendMockResponse("Audio input");
+                                        }
+                                    }, 3000); // Wait 3 seconds for server response
+                                } catch (error) {
+                                    console.error("❌ Error sending WebSocket audio message:", error);
+                                    console.log("🔄 Attempting to reconnect WebSocket...");
+                                    initializeWebSocket();
+                                    sendMockResponse("Audio input");
+                                }
                             } else {
-                                console.log("❌ WebSocket not connected, using mock response");
+                                console.log("❌ WebSocket not connected (state:", socketRef.current?.readyState, "), using mock response");
+                                console.log("🔄 Attempting to reconnect WebSocket...");
+                                initializeWebSocket();
                                 sendMockResponse("Audio input");
                             }
                         };
@@ -419,11 +475,19 @@ export default function Assistant() {
         initializeWebSocket();
         
         return () => {
+            console.log("🧹 Cleaning up WebSocket and timers...");
             if (socketRef.current) {
                 socketRef.current.close();
             }
             if (silenceTimerRef.current) {
                 clearTimeout(silenceTimerRef.current);
+            }
+            if (recognitionRef.current) {
+                try {
+                    recognitionRef.current.stop();
+                } catch (e) {
+                    console.log("Speech recognition already stopped");
+                }
             }
         };
     }, []);
