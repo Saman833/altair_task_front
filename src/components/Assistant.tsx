@@ -35,6 +35,10 @@ export default function Assistant() {
     const requestSentRef = useRef<boolean>(false);
     const conversationActiveRef = useRef<boolean>(false);
     const lastAssistantTextRef = useRef<string>("");
+    const ttsPlayingRef = useRef<boolean>(false);
+
+    // Helper to normalise text for simple echo comparison
+    const normalizeText = (txt: string) => txt.toLowerCase().replace(/[^a-z0-9 ]+/g, '').trim();
 
     const updateStatus = (message: string, className: string) => {
         setStatus(className);
@@ -107,6 +111,17 @@ export default function Assistant() {
         audio.onerror = (e) => console.error("❌ Audio error:", e);
         audio.onended = () => {
             console.log("🎵 Audio finished playing");
+            ttsPlayingRef.current = false;
+
+            // Restart recording after TTS
+            if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                setTimeout(() => {
+                    if (conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                        console.log("🔄 Restarting mic after TTS playback");
+                        handleStartRecording();
+                    }
+                }, 600); // allow echo tail to fade
+            }
         };
         
         audio.play().then(() => {
@@ -632,13 +647,13 @@ export default function Assistant() {
                     updateStatus("Processing...", "processing");
                 }, 500); // Wait 500ms for final recognition results
 
-                // Queue next recording after recognition fully ends
-                if (conversationActiveRef.current) {
+                // Queue next recording after recognition fully ends (but not while TTS is playing)
+                if (conversationActiveRef.current && !ttsPlayingRef.current) {
                     console.log("⏳ Queuing next recording until recognition ends");
                     startQueuedRef.current = true;
                     // Safety fallback: if recognition isn't running, start after short delay
                     setTimeout(() => {
-                        if (startQueuedRef.current && !recognitionRunningRef.current && conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current) {
+                        if (startQueuedRef.current && !recognitionRunningRef.current && conversationActiveRef.current && !isRecordingRef.current && !recordingStartingRef.current && !ttsPlayingRef.current) {
                             console.log("⚠️ Recognition not running, starting queued recording via fallback after delay");
                             startQueuedRef.current = false;
                             handleStartRecording();
@@ -714,9 +729,6 @@ export default function Assistant() {
             conversationActiveRef.current = false;
         };
     }, []);
-
-    // Helper to normalise text for echo comparison
-    const normalizeText = (txt: string) => txt.toLowerCase().replace(/[^a-z0-9 ]+/g, '').trim();
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
