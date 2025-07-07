@@ -131,7 +131,7 @@ export default function Home() {
         <div className="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col">
           {/* Navigation Header */}
           <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-4">
-            <h1 className="text-white text-lg font-semibold">Altair Task</h1>
+            <h1 className="text-white text-lg font-semibold">Message Assistant</h1>
             <p className="text-white/80 text-sm">Navigation Menu</p>
           </div>
           
