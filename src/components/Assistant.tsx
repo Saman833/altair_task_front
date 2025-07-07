@@ -651,11 +651,43 @@ export default function Assistant() {
 
             // Now start real-time speech recognition
             if (recognitionRef.current) {
-                recognitionRef.current.start();
-                realTimeTranscriptRef.current = "";
-                lastTranscriptChangeRef.current = Date.now();
-                requestSentRef.current = false;
-                console.log("🔄 Reset request tracking for new recording session");
+                // Ensure speech recognition is not already running
+                if (recognitionRunningRef.current) {
+                    console.log("🔄 Speech recognition already running, stopping first...");
+                    try {
+                        recognitionRef.current.stop();
+                        recognitionRunningRef.current = false;
+                    } catch (e) {
+                        console.log("Speech recognition already stopped");
+                        recognitionRunningRef.current = false;
+                    }
+                    // Wait a moment for it to fully stop
+                    setTimeout(() => {
+                        try {
+                            recognitionRef.current.start();
+                            recognitionRunningRef.current = true;
+                            realTimeTranscriptRef.current = "";
+                            lastTranscriptChangeRef.current = Date.now();
+                            requestSentRef.current = false;
+                            console.log("🔄 Reset request tracking for new recording session");
+                        } catch (e) {
+                            console.error("Failed to start speech recognition after stop:", e);
+                            recognitionRunningRef.current = false;
+                        }
+                    }, 200); // Increased delay to ensure proper state transition
+                } else {
+                    try {
+                        recognitionRef.current.start();
+                        recognitionRunningRef.current = true;
+                        realTimeTranscriptRef.current = "";
+                        lastTranscriptChangeRef.current = Date.now();
+                        requestSentRef.current = false;
+                        console.log("🔄 Reset request tracking for new recording session");
+                    } catch (e) {
+                        console.error("Failed to start speech recognition:", e);
+                        recognitionRunningRef.current = false;
+                    }
+                }
             }
             
             mediaRecorderRef.current.onstop = () => {
