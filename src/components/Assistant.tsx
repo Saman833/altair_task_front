@@ -358,15 +358,15 @@ export default function Assistant() {
             clearTimeout(silenceTimerRef.current);
         }
         
-        // Set timer for 4 seconds (less sensitive)
+        // Set timer for 1.5 seconds (more responsive)
         silenceTimerRef.current = setTimeout(() => {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-                // Check if transcript has been stable for 4 seconds
+                // Check if transcript has been stable for 1.5 seconds
                 const timeSinceLastChange = Date.now() - lastTranscriptChangeRef.current;
                 console.log("⏰ Silence timer fired - time since last change:", timeSinceLastChange, "ms");
                 
-                if (timeSinceLastChange >= 4000) {
-                    console.log("🔇 4 seconds of silence detected (no transcript changes), stopping recording");
+                if (timeSinceLastChange >= 1500) {
+                    console.log("🔇 1.5 seconds of silence detected (no transcript changes), stopping recording");
                     console.log("📝 Final transcript before stopping:", realTimeTranscriptRef.current);
                     console.log("🛑 Calling mediaRecorder.stop() from silence timer");
                     
@@ -394,9 +394,9 @@ export default function Assistant() {
             } else {
                 console.log("⏰ Silence timer fired but not recording anymore");
             }
-        }, 4000);
+        }, 1500);
         
-        console.log("⏰ Silence detection timer started (4 seconds)");
+        console.log("⏰ Silence detection timer started (1.5 seconds)");
     };
 
     const resetSilenceTimer = () => {
@@ -538,7 +538,7 @@ export default function Assistant() {
                     const timeSinceLastChange = Date.now() - lastTranscriptChangeRef.current;
                     console.log("⏰ Time since last transcript change:", timeSinceLastChange, "ms");
                     
-                    if (timeSinceLastChange >= 4000) { // Increased from 3+ to 4+ seconds since last meaningful speech
+                    if (timeSinceLastChange >= 1500) { // 1.5 seconds since last meaningful speech
                         console.log("🔇 Speech recognition ended after silence, stopping recording");
                         console.log("🛑 Calling mediaRecorder.stop() from onend handler");
                         
@@ -878,7 +878,7 @@ export default function Assistant() {
             <div className="max-w-4xl mx-auto">
                 <div className="bg-white rounded-lg shadow-lg p-8">
                     <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
-                        🤖 ElevenLabs Conversational AI
+                        ElevenLabs Conversational AI
                     </h1>
                     
                     <div className="text-center mb-8">
@@ -936,18 +936,26 @@ export default function Assistant() {
                             messages.map((message, index) => (
                                 <div 
                                     key={index} 
-                                    className={`mb-4 p-3 rounded-lg ${
-                                        message.sender === 'user' 
-                                            ? 'bg-blue-100 text-blue-900 ml-8' 
-                                            : 'bg-green-100 text-green-900 mr-8'
+                                    className={`mb-4 flex ${
+                                        message.sender === 'user' ? 'justify-end' : 'justify-start'
                                     }`}
                                 >
-                                    <div className="font-semibold mb-1">
-                                        {message.sender === 'user' ? 'You' : 'AI'}
-                                    </div>
-                                    <div>{message.text}</div>
-                                    <div className="text-xs text-gray-500 mt-1">
-                                        {message.timestamp.toLocaleTimeString()}
+                                    <div className={`max-w-xs lg:max-w-md p-4 rounded-2xl shadow-sm ${
+                                        message.sender === 'user' 
+                                            ? 'bg-blue-500 text-white' 
+                                            : 'bg-white border border-gray-200 text-gray-800'
+                                    }`}>
+                                        <div className="text-sm font-medium mb-1 opacity-80">
+                                            {message.sender === 'user' ? 'You' : 'Assistant'}
+                                        </div>
+                                        <div className="text-sm leading-relaxed">
+                                            {message.text}
+                                        </div>
+                                        <div className={`text-xs mt-2 ${
+                                            message.sender === 'user' ? 'text-blue-100' : 'text-gray-400'
+                                        }`}>
+                                            {message.timestamp.toLocaleTimeString()}
+                                        </div>
                                     </div>
                                 </div>
                             ))
